@@ -24,11 +24,13 @@ from envs.common_mj_env import (
     CommonMujocoSim,
     CommonMujocoEnv,
 )
+import pdb
 
 class MujocoSim(CommonMujocoSim):
-    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True):
+    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True, cube_positions=None):
         super().__init__(task, mjcf_path, command_queue, shm_state, show_viewer)
         self.cfg = cfg
+        self.cube_positions=cube_positions
 
         self.wbc_ik_solver = IKSolver(self.cfg.arm_reset_qpos)
 
@@ -52,7 +54,11 @@ class MujocoSim(CommonMujocoSim):
         # Reset simulation
         mujoco.mj_resetData(self.model, self.data)
 
-        self.reset_task()
+        if self.cube_positions: ## add logic based on mjcf
+            self.reset_task(self.cube_positions)
+        else: 
+            self.reset_task()
+
         mujoco.mj_forward(self.model, self.data)
 
         # Reset controllers
@@ -86,19 +92,20 @@ class MujocoSim(CommonMujocoSim):
         self.update_shm_state()
 
 class MujocoEnv(CommonMujocoEnv):
-    def __init__(self, cfg: MujocoEnvConfig, render_images=True, show_viewer=True, show_images=False):
+    def __init__(self, cfg: MujocoEnvConfig, cube_positions=None, render_images=True, show_viewer=True, show_images=False):
         super().__init__(cfg, render_images, show_viewer, show_images)
-
+        self.cube_positions = cube_positions
         self.physics_proc = mp.Process(target=self.physics_loop, daemon=True)
         self.physics_proc.start()
 
     def physics_loop(self):
-        sim = MujocoSim(self.task, self.mjcf_path, self.command_queue, self.shm_state, self.cfg, show_viewer=self.show_viewer)
+        sim = MujocoSim(self.task, self.mjcf_path, self.command_queue, self.shm_state, self.cfg, show_viewer=self.show_viewer, cube_positions=self.cube_positions)
 
         if self.render_images:
             Thread(target=self.render_loop, args=(sim.model, sim.data), daemon=True).start()
 
         sim.launch()
+
 
     def close(self):
         super().close()

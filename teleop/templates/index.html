@@ -38,7 +38,11 @@
   </head>
   <body>
     <div id="overlay">
-      <header></header>
+      <!-- <header></header> -->
+      <header>
+        <button id="cancelBtn" style="display: none;" onclick="cancelEpisode()">❌ Cancel Episode</button>
+      </header>
+
       <p><span id="info"></span></p>
     </div>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -84,6 +88,12 @@
 
       // WebGL scene globals
       let gl = null;
+
+      function cancelEpisode() {
+        const data = { timestamp: Date.now(), state_update: 'cancel_episode' };
+        socket.send(data);
+      }
+
 
       function initXR() {
         xrButton = new WebXRButton({

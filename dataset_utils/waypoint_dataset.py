@@ -163,6 +163,7 @@ def _process_episodes(fns: list[str],
     max_num_points = 0
 
     for fn in fns:
+        print("EPISODE: ", fn)
         #data = np.load(fn, allow_pickle=True)["arr_0"]
         with open(fn, "rb") as fp:
             data = pickle.load(fp)

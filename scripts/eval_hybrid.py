@@ -19,6 +19,8 @@ import open3d as o3d
 
 from scripts.train_waypoint import load_waypoint
 from scripts.train_dense import load_model
+import ipdb
+import os
 
 def run_dense_mode(env, dense_policy, dense_dataset, recorder, prev_obs):
     cached_actions = []
@@ -107,12 +109,14 @@ def run_dense_mode(env, dense_policy, dense_dataset, recorder, prev_obs):
 
 def run_waypoint_mode(env, waypoint_policy, num_pass, recorder, curr_mode):
     obs = env.get_obs()
+    print("env.get_obs()")
 
     while curr_mode in [ActMode.ArmWaypoint.value, ActMode.BaseWaypoint.value]:
         if recorder:
             recorder.add_numpy(obs, ["viewer_image"])
 
         points, colors = pcl_from_obs(obs, env.cfg)
+        print("pcl_from_obs")
         proprio = obs["proprio"]
         if len(points) == 0:
             print(f"Terminating episode because point cloud is empty")
@@ -136,12 +140,15 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, recorder, curr_mode):
             if quat_cmd[3] < 0:
                 np.negative(quat_cmd, out=quat_cmd)
             reached, err = env.move_to_arm_waypoint(pos_cmd, quat_cmd, gripper_cmd, recorder=recorder)
+            print("move_to_arm_waypoint")
         else:
             base_pose = np.array([pos_cmd[0], pos_cmd[1], R.from_quat(quat_cmd).as_euler("xyz")[2]])
             reached, err = env.move_to_base_waypoint(base_pose, recorder=recorder)
+            print("move_to_base_waypoint")
         curr_mode = next_mode
 
         obs = env.get_obs()
+        print("get_obs")
 
         if check_for_interrupt() or env.num_step > env.max_num_step or obs["reward"]:
             return ActMode.Terminate.value, obs
@@ -164,20 +171,24 @@ def eval_hybrid(
 
     env.seed(seed)
     env.reset()
+    print("1")
 
     recorder = None
     if record:
         recorder = common_utils.Recorder(save_dir)
-
+    print("2")
     mode = ActMode.ArmWaypoint.value if env.cfg.wbc else ActMode.BaseWaypoint.value
+    print("3")
     obs = env.get_obs()
-
+    print("4")
     while mode != ActMode.Terminate.value:
         if mode in [ActMode.ArmWaypoint.value, ActMode.BaseWaypoint.value]:
+            print("waypoint mode")
             mode, obs = run_waypoint_mode(env, waypoint_policy, num_pass, recorder, mode)
         elif mode == ActMode.Dense.value:
+            print("dense mode")
             mode, obs = run_dense_mode(env, dense_policy, dense_dataset, recorder, obs)
-
+    print("5")
     if recorder:
         recorder.save(f"s{seed}", fps=10)
 
@@ -196,17 +207,26 @@ def main():
     parser.add_argument("-e", "--env_cfg", type=str, required=True)
     args = parser.parse_args()
 
+    print("glfw.init():  ")
+    import glfw
+    print(glfw.init())  # should print: True
+
+
     env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))
     if env_cfg.wbc:
         from envs.mj_env_wbc import MujocoEnv
     else:
         from envs.mj_env_base_arm import MujocoEnv
-
+    print("import env")
     waypoint_policy = load_waypoint(args.waypoint_model, device="cuda").cuda()
+    print("loaded waypoint policy")
     waypoint_policy.eval()
+    print("eval waypoint policy")
 
     dense_policy, dense_dataset, _ = load_model(args.dense_model, "cuda", load_only_one=True)
+    print("loaded dense policy")
     dense_policy.eval()
+    print("eval dense policy")
 
     if dense_policy.cfg.use_ddpm:
         common_utils.cprint(f"Warning: overriding to use ddim with 10 steps")
@@ -227,6 +247,8 @@ def main():
 
     scores = []
     for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
+        # ipdb.set_trace()
+        print(f"ROLLOUT NUMBER {idx}")
         env = MujocoEnv(env_cfg, show_viewer=not args.headless, show_images=False)
         score, num_step = eval_hybrid(
             waypoint_policy,

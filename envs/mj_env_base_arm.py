@@ -24,7 +24,7 @@ from envs.common_mj_env import (
 )
 
 class MujocoSim(CommonMujocoSim):
-    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True):
+    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True, cube_positions=None):
         super().__init__(task, mjcf_path, command_queue, shm_state, show_viewer)
         self.cfg = cfg
 
@@ -46,7 +46,7 @@ class MujocoSim(CommonMujocoSim):
         # Reset simulation
         mujoco.mj_resetData(self.model, self.data)
 
-        self.reset_task()
+        self.reset_task(self.cube_positions)
         mujoco.mj_forward(self.model, self.data)
 
         # Reset controllers

@@ -22,7 +22,8 @@ ARM_RPC_HOST = '192.168.1.11' # ip for NUC on ethernet interface
 ARM_RPC_PORT = 50001
 RPC_AUTHKEY = b'secret password'
 TELEOP_HOST = '0.0.0.0' # or 'localhost'
-#TELEOP_HOST = '192.168.1.100' # if using USB-C + Ethernet cable for iPhone-laptop connection (recommended)
+
+# TELEOP_HOST = '192.168.1.100' # if using USB-C + Ethernet cable for iPhone-laptop connection (recommended)
 
 # Policy constants
 POLICY_CONTROL_FREQ = 10

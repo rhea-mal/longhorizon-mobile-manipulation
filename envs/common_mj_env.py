@@ -321,7 +321,7 @@ class CommonMujocoSim:
         self.show_viewer = show_viewer
 
         self.task = task
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_specified", "open", "dishwasher"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
 
         # Enable gravity compensation for everything except objects
         self.model.body_gravcomp[:] = 1.0
@@ -379,8 +379,7 @@ class CommonMujocoSim:
         # Check success and update reward
         self.shm_state.reward[:] = self.is_success()
 
-    def reset_task(self):
-
+    def reset_task(self, cube_positions=None):
         ## Task specific randomizations
         if self.task == "cube":
             randomized_position = np.random.uniform(
@@ -457,6 +456,28 @@ class CommonMujocoSim:
             # Finalize
             mujoco.mj_forward(self.model, self.data)
 
+        ## move cube to goal region
+        elif self.task == "cube_longhorizon":
+            if cube_positions:
+                [cube, goal] = cube_positions
+            else:
+                base_pos1 = np.array([1.0, 0.3, 0.0])  
+                noise = np.array([
+                    np.random.uniform(low=-0.2, high=0.2), 
+                    np.random.uniform(low=-0.2, high=0.2)   
+                ])
+
+                cube = base_pos.copy()
+                cube[:2] += noise
+
+            # Set positions in qpos
+            joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "interactive_obj_freejoint")
+            qpos_adr = self.model.jnt_qposadr[joint_id]
+
+            self.data.qpos[qpos_adr : qpos_adr + 3] = cube
+
+            mujoco.mj_forward(self.model, self.data)
+
         elif self.task == "cube_specified":
             # Define bounds
             low = np.array([0.5, -0.2, 0.1])  # x, y bounds, z = 0.1 fixed
@@ -519,7 +540,7 @@ class CommonMujocoSim:
             ] += randomized_position
 
     def is_success(self):
-        if self.task in ["cube", "cube_size", "cube_distractor"]:
+        if self.task in ["cube", "cube_size", "cube_distractor", "cube_lh_pick_only"]:
             ### Check whether the cube is lifted off the floor by 10cm
             interactive_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")
             cube_pos = self.data.xpos[interactive_body_id]
@@ -533,6 +554,19 @@ class CommonMujocoSim:
             cube_pos = self.data.xpos[interactive_body_id]
             z_thresh = 0.10
             reward = (cube_pos[2] > z_thresh)
+        elif self.task in ["cube_longhorizon", "cube_lh_place_only"]:
+            ## if cube in the rectangular goal region
+            cube_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")
+            cube_pos = self.data.xpos[cube_id][:2]
+            goal_center = np.array([1.0, 0.0])
+            goal_half_extent = np.array([0.15, 0.15])
+
+            within_x = abs(cube_pos[0] - goal_center[0]) <= goal_half_extent[0]
+            within_y = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
+
+            reward = within_x and within_y
+
+
         elif self.task == "open":
             door_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
             right_door_angle = self.data.sensordata[door_id]
@@ -605,9 +639,11 @@ class CommonMujocoEnv:
 
         self.task = self.cfg.task
         
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_specified", "open", "dishwasher"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
         if self.task in ["cube", "cube_size", "cube_distractor", "cube_specified"]:
             self.max_num_step = 325
+        elif self.task == "cube_longhorizon":
+            self.max_num_step = 800
         elif self.task == "open":
             self.max_num_step = 800
         elif self.task == "dishwasher":
@@ -617,6 +653,7 @@ class CommonMujocoEnv:
             'cube': "mj_assets/stanford_tidybot2/cube.xml",
             'cube_size': "mj_assets/stanford_tidybot2/cube_size.xml",
             'cube_distractor': "mj_assets/stanford_tidybot2/cube_distractor.xml",
+            'cube_longhorizon': "mj_assets/stanford_tidybot2/cube_longhorizon.xml",
             'cube_specified': "mj_assets/stanford_tidybot2/cube_specified.xml",
             'open': "mj_assets/stanford_tidybot2/open.xml",
             'dishwasher': "mj_assets/stanford_tidybot2/dishwasher.xml"
@@ -633,7 +670,7 @@ class CommonMujocoEnv:
         self.recorder = DatasetRecorder(self.data_folder)
         self.stopwatch = Stopwatch()
         self.teleop_policy = None
-
+        
         if self.render_images:
             for camera_name in self.cfg.cameras:
                 self.shm_cam_params.append(ShmCameraParameters())
@@ -986,86 +1023,283 @@ class CommonMujocoEnv:
 
         return False, pos_error_norm
 
-    def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos, step_size=0.1, threshold_pos=0.01, threshold_quat=0.01, recorder=None):
-        """
-        Moves the robot arm towards a target position and orientation using interpolation.
+    # def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos, step_size=0.1, threshold_pos=0.01, threshold_quat=0.01, recorder=None, MAX_STEP = 50):
+    #     """
+    #     Moves the robot arm towards a target position and orientation using interpolation.
 
-        Args:
-            target_arm_pos (array-like): [x, y, z] target for the arm end-effector.
-            target_arm_quat (array-like): [x, y, z, w] target quaternion for arm orientation.
-            target_gripper_pos (float): Target gripper position (0.0 closed, 1.0 open).
-            step_size (float): Maximum step size per iteration.
-            threshold_pos (float): Position error threshold for stopping.
-            threshold_quat (float): Quaternion error threshold for stopping.
+    #     Args:
+    #         target_arm_pos (array-like): [x, y, z] target for the arm end-effector.
+    #         target_arm_quat (array-like): [x, y, z, w] target quaternion for arm orientation.
+    #         target_gripper_pos (float): Target gripper position (0.0 closed, 1.0 open).
+    #         step_size (float): Maximum step size per iteration.
+    #         threshold_pos (float): Position error threshold for stopping.
+    #         threshold_quat (float): Quaternion error threshold for stopping.
 
-        Returns:
-            bool: True if the target is reached.
-        """
+    #     Returns:
+    #         bool: True if the target is reached.
+    #     """
 
-        # Ensure consistent quaternion sign
+    #     # Ensure consistent quaternion sign
+    #     if target_arm_quat[3] < 0:
+    #         np.negative(target_arm_quat, out=target_arm_quat)
+
+    #     reached = False
+    #     pos_error_norm = np.inf
+    #     step = 0
+
+    #     while not reached:
+    #         # Get current position and orientation
+    #         obs = self.get_obs()
+
+    #         curr_arm_pos, curr_arm_quat = obs["arm_pos"], obs["arm_quat"]
+
+    #         # Compute position error
+    #         pos_error = target_arm_pos - curr_arm_pos
+    #         pos_error_norm = np.linalg.norm(pos_error)
+    #         print(step, pos_error_norm)
+
+    #         # Compute quaternion error
+    #         quat_error = 1 - abs(np.dot(curr_arm_quat, target_arm_quat))
+
+    #         if pos_error_norm < threshold_pos and quat_error < threshold_quat:
+    #             reached = True
+    #             break
+
+    #         elif step > MAX_STEP:
+    #             break
+
+    #         # Compute interpolated position step
+    #         step_vec = step_size * pos_error / (pos_error_norm + 1e-6)  # Avoid division by zero
+    #         next_pos = curr_arm_pos + step_vec if pos_error_norm > step_size else target_arm_pos
+
+    #         if not self.cfg.wbc:
+    #             next_pos = self.global_to_local_arm_pos(next_pos, obs['base_pose'])
+
+    #         # Compute interpolated quaternion step using Slerp
+    #         key_times = [0, 1]  # Define key times
+    #         key_rots = R.from_quat([curr_arm_quat, target_arm_quat])  # Define key rotations
+    #         slerp = Slerp(key_times, key_rots)  # Create Slerp object
+    #         interp_ratio = min(step_size / (pos_error_norm + 1e-6), 1.0)  # Normalize step size
+    #         next_quat = slerp([interp_ratio]).as_quat()[0]  # Interpolated quaternion
+
+    #         # Execute action
+    #         self.step({
+    #             "arm_pos": next_pos,
+    #             "arm_quat": next_quat,
+    #             "gripper_pos": 1 if obs['gripper_pos'] > 0.3 else obs['gripper_pos'],
+    #         })
+
+    #         time.sleep(POLICY_CONTROL_PERIOD)  # Maintain control rate
+    #         step += 1
+
+    #         if recorder is not None:
+    #             recorder.add_numpy(obs, ["viewer_image"])
+
+    #     # Move the gripper
+    #     for _ in range(10):  # Hack: Execute gripper action for 10 timesteps
+    #         obs = self.get_obs()
+    #         self.step({"gripper_pos": target_gripper_pos})
+    #         time.sleep(POLICY_CONTROL_PERIOD)
+
+    #         if recorder is not None:
+    #             recorder.add_numpy(obs, ["viewer_image"])
+
+    #     return reached, pos_error_norm
+
+    def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos,
+                         step_size=0.1, threshold_pos=0.01, threshold_quat=0.01,
+                         recorder=None, MAX_STEP=50, mode="pick"):
+
+        def record_delta(prev_obs, curr_obs, gripper_pos):
+            if self.recorder is None or mode=="pick":
+                return
+
+            curr_quat = curr_obs['arm_quat']
+            prev_quat = prev_obs['arm_quat']
+
+            if curr_quat[3] < 0:
+                np.negative(curr_quat, out=curr_quat)
+
+            delta_pos = curr_obs['arm_pos'] - prev_obs['arm_pos']
+            delta_rot = R.from_quat(curr_quat) * R.from_quat(prev_quat).inv()
+            delta_quat = delta_rot.as_quat()
+            delta_base = curr_obs['base_pose'] - prev_obs['base_pose']
+
+            record_action = np.concatenate([
+                curr_obs['arm_pos'].flatten(),
+                curr_quat.flatten(),
+                np.array([gripper_pos]),
+                curr_obs['base_pose'].flatten()
+            ])
+
+            delta_action = np.concatenate([
+                delta_pos.flatten(),
+                delta_quat.flatten(),
+                np.array([gripper_pos - prev_obs['gripper_pos'].item()]),
+                delta_base.flatten()
+            ])
+
+            self.recorder.record(
+                ActMode.ArmWaypoint,
+                prev_obs,
+                action=record_action,
+                delta_action=delta_action,
+                teleop_mode="scripted"
+            )
+
         if target_arm_quat[3] < 0:
             np.negative(target_arm_quat, out=target_arm_quat)
 
         reached = False
         pos_error_norm = np.inf
-        MAX_STEP = 50
         step = 0
 
         while not reached:
-            # Get current position and orientation
-            obs = self.get_obs()
+            prev_obs = self.get_obs()
+            curr_arm_pos = prev_obs["arm_pos"]
+            curr_arm_quat = prev_obs["arm_quat"]
+            gripper_pos = prev_obs["gripper_pos"].item()
 
-            curr_arm_pos, curr_arm_quat = obs["arm_pos"], obs["arm_quat"]
-
-            # Compute position error
             pos_error = target_arm_pos - curr_arm_pos
             pos_error_norm = np.linalg.norm(pos_error)
-            print(step, pos_error_norm)
-
-            # Compute quaternion error
             quat_error = 1 - abs(np.dot(curr_arm_quat, target_arm_quat))
+
+            print(step, pos_error_norm)
 
             if pos_error_norm < threshold_pos and quat_error < threshold_quat:
                 reached = True
                 break
-
             elif step > MAX_STEP:
                 break
 
-            # Compute interpolated position step
-            step_vec = step_size * pos_error / (pos_error_norm + 1e-6)  # Avoid division by zero
+            step_vec = step_size * pos_error / (pos_error_norm + 1e-6)
             next_pos = curr_arm_pos + step_vec if pos_error_norm > step_size else target_arm_pos
 
             if not self.cfg.wbc:
-                next_pos = self.global_to_local_arm_pos(next_pos, obs['base_pose'])
+                next_pos = self.global_to_local_arm_pos(next_pos, prev_obs['base_pose'])
 
-            # Compute interpolated quaternion step using Slerp
-            key_times = [0, 1]  # Define key times
-            key_rots = R.from_quat([curr_arm_quat, target_arm_quat])  # Define key rotations
-            slerp = Slerp(key_times, key_rots)  # Create Slerp object
-            interp_ratio = min(step_size / (pos_error_norm + 1e-6), 1.0)  # Normalize step size
-            next_quat = slerp([interp_ratio]).as_quat()[0]  # Interpolated quaternion
+            key_times = [0, 1]
+            key_rots = R.from_quat([curr_arm_quat, target_arm_quat])
+            slerp = Slerp(key_times, key_rots)
+            interp_ratio = min(step_size / (pos_error_norm + 1e-6), 1.0)
+            next_quat = slerp([interp_ratio]).as_quat()[0]
 
-            # Execute action
             self.step({
                 "arm_pos": next_pos,
                 "arm_quat": next_quat,
-                "gripper_pos": 1 if obs['gripper_pos'] > 0.3 else obs['gripper_pos'],
+                "gripper_pos": 1.0 if gripper_pos > 0.3 else gripper_pos,
             })
 
-            time.sleep(POLICY_CONTROL_PERIOD)  # Maintain control rate
+            curr_obs = self.get_obs()
+            record_delta(prev_obs, curr_obs, gripper_pos)
+
+            if recorder is not None:
+                recorder.add_numpy(curr_obs, ["viewer_image"])
+
+            time.sleep(POLICY_CONTROL_PERIOD)
             step += 1
 
-            if recorder is not None:
-                recorder.add_numpy(obs, ["viewer_image"])
-
-        # Move the gripper
-        for _ in range(10):  # Hack: Execute gripper action for 10 timesteps
-            obs = self.get_obs()
+        # Final gripper move
+        for _ in range(10):
+            prev_obs = self.get_obs()
+            gripper_pos = prev_obs["gripper_pos"].item()
             self.step({"gripper_pos": target_gripper_pos})
-            time.sleep(POLICY_CONTROL_PERIOD)
+            curr_obs = self.get_obs()
+            record_delta(prev_obs, curr_obs, target_gripper_pos)
 
             if recorder is not None:
-                recorder.add_numpy(obs, ["viewer_image"])
+                recorder.add_numpy(curr_obs, ["viewer_image"])
+            time.sleep(POLICY_CONTROL_PERIOD)
+            step += 1
 
-        return reached, pos_error_norm
+        return reached, pos_error_norm, step
+
+######## NEW ADDED HARDCODED DEMO LOGIC
+    def scripted_pick(self, cube_pos, goal_pos, annotations, total_steps):
+        approach_offset = np.array([0, 0, 0.08])  
+        prepick_offset = np.array([0, 0, 0.05])
+        lifted_offset = np.array([0, 0, 0.12])
+        cylinder_height = np.array([0, 0, 0.05])
+
+        MAX_STEP = 35
+        def append_annotation(n):
+            annotations.append(ActMode.ArmWaypoint)
+            annotations.extend([ActMode.Interpolate] * (n - 1))
+        # Approach Cube
+        _, _, n = self.move_to_arm_waypoint(
+            target_arm_pos=cube_pos + approach_offset,
+            target_arm_quat=np.array([1, 1, 0, 0]),  # assume vertical
+            target_gripper_pos=0.0,  # open
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # Lower + Grab Cube
+        _, _, n = self.move_to_arm_waypoint(
+            target_arm_pos=cube_pos + prepick_offset,
+            target_arm_quat=np.array([1, 1, 0, 0]),  # assume vertical
+            target_gripper_pos=1.0,  # close
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # Lift up
+        _, _, n = self.move_to_arm_waypoint(
+            target_arm_pos=cube_pos + lifted_offset + cylinder_height,
+            target_arm_quat=np.array([1, 1, 0, 0]),
+            target_gripper_pos=1.0,
+            MAX_STEP=10, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+        return annotations, total_steps
+
+
+    def scripted_place(self, cube_pos, goal_pos, annotations, total_steps):
+        approach_offset = np.array([0, 0, 0.08])  
+        prepick_offset = np.array([0, 0, 0.05])
+        lifted_offset = np.array([0, 0, 0.12])
+        cylinder_height = np.array([0, 0, 0.05])
+
+        def append_annotation(n):
+            annotations.append(ActMode.ArmWaypoint)
+            annotations.extend([ActMode.Interpolate] * (n - 1))
+
+        # Move to goal
+        _, _, n = self.move_to_arm_waypoint(
+            target_arm_pos=goal_pos + lifted_offset + cylinder_height,
+            target_arm_quat=np.array([1, 1, 0, 0]),
+            target_gripper_pos=1.0,
+            MAX_STEP=30, mode="place"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # Lower to goal + open
+        _, _, n = self.move_to_arm_waypoint(
+            target_arm_pos=goal_pos + approach_offset + cylinder_height,
+            target_arm_quat=np.array([1, 1, 0, 0]),
+            target_gripper_pos=0.0,
+            MAX_STEP=15, mode="place"
+        )
+        total_steps += n
+        append_annotation(n)
+        return annotations, total_steps
+
+
+    def hardcoded_episode(self, cube_positions):
+        [cube1, goal1] = cube_positions
+        self._dump_or_check_env_cfg()
+        # pdb.set_trace()
+        self.scripted_pick(cube1, goal1, [], 0)
+        # pdb.set_trace()
+        print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
+        # self.reset()
+        self.seed(self.recorder.episode_idx)
+        annotations, total_steps = self.scripted_place(cube1, goal1, [], 0)
+        episode_fn = os.path.join("dev1/", f"demo{self.recorder.episode_idx:05d}.pkl")
+        self.recorder.end_episode(save=True)
+        print(Fore.GREEN + "Episode complete and saved!" + Style.RESET_ALL)
+        return annotations, episode_fn

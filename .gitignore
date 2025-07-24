@@ -1,0 +1,7 @@
+# Ignore demo and relabeled data directories
+data/
+dev1/
+dev1_relabeled/
+
+# Ignore SFTP config file
+sftp-config.json

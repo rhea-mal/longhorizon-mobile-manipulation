@@ -2,9 +2,9 @@
 
 #SBATCH --partition=iris-hi
 #SBATCH --chdir=/iris/u/rheamal/homer
-#SBATCH --output=slurm/pickonly-%j.out
-#SBATCH --error=slurm/pickonly-%j.err
-#SBATCH --job-name=pick
+#SBATCH --output=slurm/placeonly-%j.out
+#SBATCH --error=slurm/placeonly-%j.err
+#SBATCH --job-name=place
 #SBATCH --time=20:00:00
 #SBATCH --cpus-per-task=20
 #SBATCH --mem-per-cpu=4G
@@ -20,6 +20,6 @@ echo "Activating environment..."
 source ~/.bashrc
 conda activate tidybot2
 
-python scripts/train_waypoint.py --config_path cfgs/waypoint/cube_lh_pickonly_wbc.yaml
+python scripts/train_waypoint.py --config_path cfgs/waypoint/cube_lh_placeonly_wbc.yaml
 
 echo "Job completed at $(date)"
