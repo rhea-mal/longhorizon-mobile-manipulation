@@ -461,7 +461,7 @@ class CommonMujocoSim:
             if cube_positions:
                 [cube, goal] = cube_positions
             else:
-                base_pos1 = np.array([1.0, 0.3, 0.0])  
+                base_pos = np.array([1.0, 0.3, 0.0])  
                 noise = np.array([
                     np.random.uniform(low=-0.2, high=0.2), 
                     np.random.uniform(low=-0.2, high=0.2)   
@@ -1023,90 +1023,90 @@ class CommonMujocoEnv:
 
         return False, pos_error_norm
 
-    # def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos, step_size=0.1, threshold_pos=0.01, threshold_quat=0.01, recorder=None, MAX_STEP = 50):
-    #     """
-    #     Moves the robot arm towards a target position and orientation using interpolation.
+    def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos, step_size=0.1, threshold_pos=0.01, threshold_quat=0.01, recorder=None, MAX_STEP = 50):
+        """
+        Moves the robot arm towards a target position and orientation using interpolation.
 
-    #     Args:
-    #         target_arm_pos (array-like): [x, y, z] target for the arm end-effector.
-    #         target_arm_quat (array-like): [x, y, z, w] target quaternion for arm orientation.
-    #         target_gripper_pos (float): Target gripper position (0.0 closed, 1.0 open).
-    #         step_size (float): Maximum step size per iteration.
-    #         threshold_pos (float): Position error threshold for stopping.
-    #         threshold_quat (float): Quaternion error threshold for stopping.
+        Args:
+            target_arm_pos (array-like): [x, y, z] target for the arm end-effector.
+            target_arm_quat (array-like): [x, y, z, w] target quaternion for arm orientation.
+            target_gripper_pos (float): Target gripper position (0.0 closed, 1.0 open).
+            step_size (float): Maximum step size per iteration.
+            threshold_pos (float): Position error threshold for stopping.
+            threshold_quat (float): Quaternion error threshold for stopping.
 
-    #     Returns:
-    #         bool: True if the target is reached.
-    #     """
+        Returns:
+            bool: True if the target is reached.
+        """
 
-    #     # Ensure consistent quaternion sign
-    #     if target_arm_quat[3] < 0:
-    #         np.negative(target_arm_quat, out=target_arm_quat)
+        # Ensure consistent quaternion sign
+        if target_arm_quat[3] < 0:
+            np.negative(target_arm_quat, out=target_arm_quat)
 
-    #     reached = False
-    #     pos_error_norm = np.inf
-    #     step = 0
+        reached = False
+        pos_error_norm = np.inf
+        step = 0
 
-    #     while not reached:
-    #         # Get current position and orientation
-    #         obs = self.get_obs()
+        while not reached:
+            # Get current position and orientation
+            obs = self.get_obs()
 
-    #         curr_arm_pos, curr_arm_quat = obs["arm_pos"], obs["arm_quat"]
+            curr_arm_pos, curr_arm_quat = obs["arm_pos"], obs["arm_quat"]
 
-    #         # Compute position error
-    #         pos_error = target_arm_pos - curr_arm_pos
-    #         pos_error_norm = np.linalg.norm(pos_error)
-    #         print(step, pos_error_norm)
+            # Compute position error
+            pos_error = target_arm_pos - curr_arm_pos
+            pos_error_norm = np.linalg.norm(pos_error)
+            print(step, pos_error_norm)
 
-    #         # Compute quaternion error
-    #         quat_error = 1 - abs(np.dot(curr_arm_quat, target_arm_quat))
+            # Compute quaternion error
+            quat_error = 1 - abs(np.dot(curr_arm_quat, target_arm_quat))
 
-    #         if pos_error_norm < threshold_pos and quat_error < threshold_quat:
-    #             reached = True
-    #             break
+            if pos_error_norm < threshold_pos and quat_error < threshold_quat:
+                reached = True
+                break
 
-    #         elif step > MAX_STEP:
-    #             break
+            elif step > MAX_STEP:
+                break
 
-    #         # Compute interpolated position step
-    #         step_vec = step_size * pos_error / (pos_error_norm + 1e-6)  # Avoid division by zero
-    #         next_pos = curr_arm_pos + step_vec if pos_error_norm > step_size else target_arm_pos
+            # Compute interpolated position step
+            step_vec = step_size * pos_error / (pos_error_norm + 1e-6)  # Avoid division by zero
+            next_pos = curr_arm_pos + step_vec if pos_error_norm > step_size else target_arm_pos
 
-    #         if not self.cfg.wbc:
-    #             next_pos = self.global_to_local_arm_pos(next_pos, obs['base_pose'])
+            if not self.cfg.wbc:
+                next_pos = self.global_to_local_arm_pos(next_pos, obs['base_pose'])
 
-    #         # Compute interpolated quaternion step using Slerp
-    #         key_times = [0, 1]  # Define key times
-    #         key_rots = R.from_quat([curr_arm_quat, target_arm_quat])  # Define key rotations
-    #         slerp = Slerp(key_times, key_rots)  # Create Slerp object
-    #         interp_ratio = min(step_size / (pos_error_norm + 1e-6), 1.0)  # Normalize step size
-    #         next_quat = slerp([interp_ratio]).as_quat()[0]  # Interpolated quaternion
+            # Compute interpolated quaternion step using Slerp
+            key_times = [0, 1]  # Define key times
+            key_rots = R.from_quat([curr_arm_quat, target_arm_quat])  # Define key rotations
+            slerp = Slerp(key_times, key_rots)  # Create Slerp object
+            interp_ratio = min(step_size / (pos_error_norm + 1e-6), 1.0)  # Normalize step size
+            next_quat = slerp([interp_ratio]).as_quat()[0]  # Interpolated quaternion
 
-    #         # Execute action
-    #         self.step({
-    #             "arm_pos": next_pos,
-    #             "arm_quat": next_quat,
-    #             "gripper_pos": 1 if obs['gripper_pos'] > 0.3 else obs['gripper_pos'],
-    #         })
+            # Execute action
+            self.step({
+                "arm_pos": next_pos,
+                "arm_quat": next_quat,
+                "gripper_pos": 1 if obs['gripper_pos'] > 0.3 else obs['gripper_pos'],
+            })
 
-    #         time.sleep(POLICY_CONTROL_PERIOD)  # Maintain control rate
-    #         step += 1
+            time.sleep(POLICY_CONTROL_PERIOD)  # Maintain control rate
+            step += 1
 
-    #         if recorder is not None:
-    #             recorder.add_numpy(obs, ["viewer_image"])
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
 
-    #     # Move the gripper
-    #     for _ in range(10):  # Hack: Execute gripper action for 10 timesteps
-    #         obs = self.get_obs()
-    #         self.step({"gripper_pos": target_gripper_pos})
-    #         time.sleep(POLICY_CONTROL_PERIOD)
+        # Move the gripper
+        for _ in range(10):  # Hack: Execute gripper action for 10 timesteps
+            obs = self.get_obs()
+            self.step({"gripper_pos": target_gripper_pos})
+            time.sleep(POLICY_CONTROL_PERIOD)
 
-    #         if recorder is not None:
-    #             recorder.add_numpy(obs, ["viewer_image"])
+            if recorder is not None:
+                recorder.add_numpy(obs, ["viewer_image"])
 
-    #     return reached, pos_error_norm
+        return reached, pos_error_norm
 
-    def move_to_arm_waypoint(self, target_arm_pos, target_arm_quat, target_gripper_pos,
+    def move_to_arm_waypoint_hardcoded(self, target_arm_pos, target_arm_quat, target_gripper_pos,
                          step_size=0.1, threshold_pos=0.01, threshold_quat=0.01,
                          recorder=None, MAX_STEP=50, mode="pick"):
 
@@ -1226,7 +1226,7 @@ class CommonMujocoEnv:
             annotations.append(ActMode.ArmWaypoint)
             annotations.extend([ActMode.Interpolate] * (n - 1))
         # Approach Cube
-        _, _, n = self.move_to_arm_waypoint(
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=cube_pos + approach_offset,
             target_arm_quat=np.array([1, 1, 0, 0]),  # assume vertical
             target_gripper_pos=0.0,  # open
@@ -1236,7 +1236,7 @@ class CommonMujocoEnv:
         append_annotation(n)
 
         # Lower + Grab Cube
-        _, _, n = self.move_to_arm_waypoint(
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=cube_pos + prepick_offset,
             target_arm_quat=np.array([1, 1, 0, 0]),  # assume vertical
             target_gripper_pos=1.0,  # close
@@ -1246,7 +1246,7 @@ class CommonMujocoEnv:
         append_annotation(n)
 
         # Lift up
-        _, _, n = self.move_to_arm_waypoint(
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=cube_pos + lifted_offset + cylinder_height,
             target_arm_quat=np.array([1, 1, 0, 0]),
             target_gripper_pos=1.0,
@@ -1268,7 +1268,7 @@ class CommonMujocoEnv:
             annotations.extend([ActMode.Interpolate] * (n - 1))
 
         # Move to goal
-        _, _, n = self.move_to_arm_waypoint(
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=goal_pos + lifted_offset + cylinder_height,
             target_arm_quat=np.array([1, 1, 0, 0]),
             target_gripper_pos=1.0,
@@ -1278,7 +1278,7 @@ class CommonMujocoEnv:
         append_annotation(n)
 
         # Lower to goal + open
-        _, _, n = self.move_to_arm_waypoint(
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=goal_pos + approach_offset + cylinder_height,
             target_arm_quat=np.array([1, 1, 0, 0]),
             target_gripper_pos=0.0,

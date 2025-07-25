@@ -1,7 +1,7 @@
 from vlm_utils import analyze_imageraw_with_gpt4v
 import cv2
 from PIL import Image
-# import google.generativeai as genai
+# pip install google-genai
 from google import genai
 import re
 import json
@@ -38,8 +38,8 @@ def extract_action_plan_from_gemini_response(response):
 
 ### GEMINI
 def gemini_prompt(prompt, image_path=None, mode="basic"):
-    api_key="AIzaSyCVq9wD3SrS1EIjLNj3gB8Uxslft-YcKiY"
-    client = genai.Client(api_key="AIzaSyCVq9wD3SrS1EIjLNj3gB8Uxslft-YcKiY")
+    api_key="yourapikey"
+    client = genai.Client(api_key=api_key)
     # genai.configure(api_key=api_key)
 
     if mode=="basic":
@@ -68,7 +68,7 @@ def gemini_prompt(prompt, image_path=None, mode="basic"):
 def chatgpt4o_prompt(prompt, image_path):
     image_data = cv2.imread(jpg_path)
     ## replace this with lab key when jeannette back
-    api_key = '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'
+    api_key = "yourapikey"
     vlm_response = analyze_imageraw_with_gpt4v(
                 image_data,
                 prompt,
@@ -91,7 +91,7 @@ def format_config(plan_array, library):
 
 def list_of_policies():
     policies = {}  # dict of policy name → full path
-    for base_dir in ["exps/waypoint", "exps/dense"]:
+    for base_dir in ["exps/waypoint/longhorizon"]:
         if not os.path.exists(base_dir):
             print(base_dir, " doesn't exist")
             continue  
@@ -104,8 +104,8 @@ def list_of_policies():
 
 def main():
     library = list_of_policies()
-    library = {'pick_red_cube': 'exps/waypoint/cube_longhorizon_wbc', 'pick_green_cube': 'exps/waypoint/cube_base_arm', 'place_green_cube': 'exps/waypoint/cube_wbc', 'throw_purple_cube': 'exps/waypoint/cube_lh_pickonly_wbc', 'place_red_cube': 'exps/waypoint/cube_lh_placeonly_wbc', 'place_blue_cube': 'exps/waypoint/cube_longhorizon_wbc_bad', 'pick_blue_cube': 'exps/dense/cube_base_arm_delta_allcams', 'cube_wbc_delta_allcams': 'exps/dense/cube_wbc_delta_allcams'}
-    task = "Move the red and blue cubes to the target"
+    # library = {'pick_red_cube': 'exps/waypoint/cube_longhorizon_wbc', 'pick_green_cube': 'exps/waypoint/cube_base_arm', 'place_green_cube': 'exps/waypoint/cube_wbc', 'throw_purple_cube': 'exps/waypoint/cube_lh_pickonly_wbc', 'place_red_cube': 'exps/waypoint/cube_lh_placeonly_wbc', 'place_blue_cube': 'exps/waypoint/cube_longhorizon_wbc_bad', 'pick_blue_cube': 'exps/dense/cube_base_arm_delta_allcams', 'cube_wbc_delta_allcams': 'exps/dense/cube_wbc_delta_allcams'}
+    task = "Move the green cube to the target"
 
 
     prompt = (
