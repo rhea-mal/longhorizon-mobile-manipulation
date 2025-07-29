@@ -11,9 +11,10 @@ import threading
 class ActMode(Enum):
     ArmWaypoint = 0
     Dense = 1
-    Terminate = 2
+    Terminate = 2 #finished entire long horizon task
     BaseWaypoint = 3
     Interpolate = 4
+    LocalTerminate = 5 #finished individual action
 
 
 class DatasetRecorder:

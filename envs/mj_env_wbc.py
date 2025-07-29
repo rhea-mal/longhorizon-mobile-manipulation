@@ -27,10 +27,11 @@ from envs.common_mj_env import (
 import pdb
 
 class MujocoSim(CommonMujocoSim):
-    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True, cube_positions=None):
+    def __init__(self, task, mjcf_path, command_queue, shm_state, cfg, show_viewer=True, cube_positions=None, current_task=None):
         super().__init__(task, mjcf_path, command_queue, shm_state, show_viewer)
         self.cfg = cfg
         self.cube_positions=cube_positions
+        self.current_task = current_task
 
         self.wbc_ik_solver = IKSolver(self.cfg.arm_reset_qpos)
 
@@ -49,7 +50,6 @@ class MujocoSim(CommonMujocoSim):
 
         # Set control callback
         mujoco.set_mjcb_control(self.control_callback)
-
     def reset(self):
         # Reset simulation
         mujoco.mj_resetData(self.model, self.data)
@@ -58,6 +58,8 @@ class MujocoSim(CommonMujocoSim):
             self.reset_task(self.cube_positions)
         else: 
             self.reset_task()
+        if self.current_task:
+            self.set_current_task(self.current_task)
 
         mujoco.mj_forward(self.model, self.data)
 
@@ -71,10 +73,13 @@ class MujocoSim(CommonMujocoSim):
         # Check for new command
         command = None if self.command_queue.empty() else self.command_queue.get()
 
-        if isinstance(command, tuple) and command[0] == "set_seed":
-            self.set_seed(command[1])
-
-        if command == 'reset':
+        if isinstance(command, tuple):
+            if command[0] == "set_seed":
+                self.set_seed(command[1])
+            elif command[0] == "set_current_task":
+                self.current_task = command[1]
+                print(f"[SIM DEBUG] Current task set to: {self.current_task}")
+        elif command == 'reset':
             self.reset()
 
         if command is not None and 'arm_pos' in command:
@@ -92,19 +97,22 @@ class MujocoSim(CommonMujocoSim):
         self.update_shm_state()
 
 class MujocoEnv(CommonMujocoEnv):
-    def __init__(self, cfg: MujocoEnvConfig, cube_positions=None, render_images=True, show_viewer=True, show_images=False):
+    def __init__(self, cfg: MujocoEnvConfig, cube_positions=None, current_task=None, render_images=True, show_viewer=True, show_images=False):
         super().__init__(cfg, render_images, show_viewer, show_images)
         self.cube_positions = cube_positions
+        self.current_task = current_task
         self.physics_proc = mp.Process(target=self.physics_loop, daemon=True)
         self.physics_proc.start()
 
     def physics_loop(self):
-        sim = MujocoSim(self.task, self.mjcf_path, self.command_queue, self.shm_state, self.cfg, show_viewer=self.show_viewer, cube_positions=self.cube_positions)
+        sim = MujocoSim(self.task, self.mjcf_path, self.command_queue, self.shm_state, self.cfg, show_viewer=self.show_viewer, cube_positions=self.cube_positions, current_task=self.current_task)
 
         if self.render_images:
             Thread(target=self.render_loop, args=(sim.model, sim.data), daemon=True).start()
 
         sim.launch()
+    def set_current_task(self, current_task):
+        self.command_queue.put(("set_current_task", current_task))
 
 
     def close(self):

@@ -94,7 +94,11 @@ def run_dense_mode(env, dense_policy, dense_dataset, recorder, prev_obs):
         if recorder:
             recorder.add_numpy(obs, ["viewer_image"], color=(255, 140, 0))
 
-        if check_for_interrupt() or env.num_step > env.max_num_step or (env.num_step > 50 and obs["reward"]):
+
+        if obs["local_reward"]:
+            print("local terminate")
+            return ActMode.LocalTerminate.value, obs        
+        elif check_for_interrupt() or env.num_step > env.max_num_step or (env.num_step > 50 and obs["reward"]):
             return ActMode.Terminate.value, obs
 
         # Enforce control frequency
@@ -128,7 +132,6 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, recorder, curr_mode):
                 num_pass=num_pass,
             )
             print(next_mode)
-            # print(obs['arm_pos'], pos_cmd)
 
             if waypoint_policy.cfg.use_euler:
                 quat_cmd = R.from_euler("xyz", rot_cmd).as_quat()
@@ -148,25 +151,12 @@ def run_waypoint_mode(env, waypoint_policy, num_pass, recorder, curr_mode):
 
         obs = env.get_obs()
 
-        if check_for_interrupt() or env.num_step > env.max_num_step or obs["reward"]:
+        if obs["local_reward"]:
+            print("local terminate")
+            return ActMode.LocalTerminate.value, obs
+        elif check_for_interrupt() or env.num_step > env.max_num_step:
+            print("check_for_interrupt() or env.num_step > env.max_num_step")
             return ActMode.Terminate.value, obs
-
-    return curr_mode, obs
-
-
-def open_gripper(env, num_steps=5):
-	obs = env.get_obs()
-	action_dict = {
-    	"base_pose": obs.get("base_pose", np.zeros(3)),
-    	"arm_pos": obs["arm_pos"],
-    	"arm_quat": obs["arm_quat"],
-    	"gripper_pos": np.array([0.0]),  # 1.0 = open, adjust if needed
-	}
-	env.step(action_dict)
-	# Go back to waypoint mode
-	mode = ActMode.ArmWaypoint.value if env.cfg.wbc else ActMode.BaseWaypoint.value
-
-	return mode, env.get_obs()
 
 def eval_hybrid(
     policies,
@@ -187,27 +177,30 @@ def eval_hybrid(
     obs = env.get_obs()
 
     i = 0
-    while mode != ActMode.Terminate.value and i < len(policies):
+    while i < len(policies):
         policy_entry = policies[i]
-
-        if policy_entry["type"] == "reset":
-            print("[INFO] Executing open_gripper() reset")
-            mode, obs = open_gripper(env)
-
+        current_task = policy_entry["name"]
+        env.set_current_task(current_task)
         if policy_entry["type"] == "waypoint" and mode in [ActMode.ArmWaypoint.value, ActMode.BaseWaypoint.value]:
             mode, obs = run_waypoint_mode(env, policy_entry["policy"], num_pass, recorder, mode)
 
         elif policy_entry["type"] == "dense" and mode == ActMode.Dense.value:
             mode, obs = run_dense_mode(env, policy_entry["policy"], policy_entry["dataset"], recorder, obs)
 
-        # Only move to next policy if one of them has finished its turn
-        # skip incrementing `i` if you want retrying the same policy until success
-        i += 1
+        if mode == ActMode.LocalTerminate.value:
+            print(f"[INFO] Local task {i} complete. Proceeding to next.")
+            i += 1
+            mode = ActMode.ArmWaypoint.value if env.cfg.wbc else ActMode.BaseWaypoint.value
+        elif mode == ActMode.Terminate.value:
+            print(f"[INFO] Finished long-horizon episode.")
+            break
+
 
     if recorder:
         recorder.save(f"s{seed}", fps=10)
 
     return obs["reward"], env.num_step
+
 
 
 def main():
@@ -234,18 +227,17 @@ def main():
     policies = []
     for policy_path in config:
         if "waypoint" in policy_path:
-            print("Executing:", policy_path)
             execute_path = os.path.join(policy_path, "latest.pt")
+            name = policy_path.split('/')[-1]
             wp = load_waypoint(execute_path, device="cuda").cuda()
             wp.eval()
-            policies.append({"type": "waypoint", "policy": wp})
+            policies.append({"type": "waypoint", "policy": wp, "name": name})
         if "dense" in policy_path:
             dp, dd, _ = load_model(policy_path, "cuda", load_only_one=True)
+            name = policy_path.split('/')[-1]
             dp.eval()
-            policies.append({"type": "dense", "policy": dp, "dataset": dd})
-        if policy_path == "reset":
-            print("made it here")
-            policies.append({"type": "reset"})
+            policies.append({"type": "dense", "policy": dp, "dataset": dd, "name": name})
+
     idx = 0
 
     if os.path.exists(args.save_dir):
@@ -258,10 +250,9 @@ def main():
             sys.stdout = common_utils.Logger(log_path, mode="a", print_to_stdout=True)
         else:
             sys.stdout = common_utils.Logger(log_path, mode="w", print_to_stdout=True)
-
     scores = []
     for idx, seed in enumerate(range(args.seed, args.seed + args.num_episode)):
-        env = MujocoEnv(env_cfg, show_viewer=not args.headless, show_images=False)
+        env = MujocoEnv(env_cfg, show_viewer=not args.headless, show_images=False, current_task = "pick_green_cube")
         score, num_step = eval_hybrid(
             policies,
             env,

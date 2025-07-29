@@ -146,7 +146,7 @@ class ArmController:
 
 class ShmState:
     def __init__(self, existing_instance=None):
-        arr = np.empty(3 + 3 + 4 + 1 + 1 + 1 + 1)
+        arr = np.empty(3 + 3 + 4 + 1 + 1 + 1 + 1 + 1)
         if existing_instance is None:
             self.shm = shared_memory.SharedMemory(create=True, size=arr.nbytes)
         else:
@@ -160,7 +160,9 @@ class ShmState:
         self.initialized[:] = 0.0
         self.reward = self.data[12:13]
         self.reward[:] = 0
-        self.goal_cube = self.data[13:14] # for cube task
+        self.local_reward = self.data[13:14]
+        self.local_reward[:] = 0
+        self.goal_cube = self.data[14:15] # for cube task
         self.goal_cube[:] = 1.0  # default to green cube
 
     def close(self):
@@ -322,7 +324,7 @@ class CommonMujocoSim:
 
         self.task = task
         assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
-
+        
         # Enable gravity compensation for everything except objects
         self.model.body_gravcomp[:] = 1.0
         body_names = {self.model.body(i).name for i in range(self.model.nbody)}
@@ -378,6 +380,12 @@ class CommonMujocoSim:
 
         # Check success and update reward
         self.shm_state.reward[:] = self.is_success()
+        self.shm_state.local_reward[:] = self.is_local_success()
+
+    def set_current_task(self, current_task=None):
+        self.current_task=current_task
+        print("SETTING CURRENT TASK: ", current_task)
+        self.shm_state.local_reward[:] = self.is_local_success()
 
     def reset_task(self, cube_positions=None):
         ## Task specific randomizations
@@ -461,10 +469,10 @@ class CommonMujocoSim:
             if cube_positions:
                 [cube, goal] = cube_positions
             else:
-                base_pos = np.array([1.0, 0.3, 0.0])  
+                base_pos = np.array([1.0, 0.4, 0.0])  
                 noise = np.array([
-                    np.random.uniform(low=-0.2, high=0.2), 
-                    np.random.uniform(low=-0.2, high=0.2)   
+                    np.random.uniform(low=-0.4, high=0.0), 
+                    np.random.uniform(low=-0.2, high=0.0)   
                 ])
 
                 cube = base_pos.copy()
@@ -539,8 +547,8 @@ class CommonMujocoSim:
                 + 3
             ] += randomized_position
 
-    def is_success(self):
-        if self.task in ["cube", "cube_size", "cube_distractor", "cube_lh_pick_only"]:
+    def is_success(self): #GLOBAL
+        if self.task in ["cube", "cube_size", "cube_distractor"]:
             ### Check whether the cube is lifted off the floor by 10cm
             interactive_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")
             cube_pos = self.data.xpos[interactive_body_id]
@@ -554,18 +562,20 @@ class CommonMujocoSim:
             cube_pos = self.data.xpos[interactive_body_id]
             z_thresh = 0.10
             reward = (cube_pos[2] > z_thresh)
-        elif self.task in ["cube_longhorizon", "cube_lh_place_only"]:
-            ## if cube in the rectangular goal region
-            cube_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")
-            cube_pos = self.data.xpos[cube_id][:2]
-            goal_center = np.array([1.0, 0.0])
-            goal_half_extent = np.array([0.15, 0.15])
+        elif self.task == "cube_longhorizon":
+            cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
+            
+            goal_center = np.array([1.0, 0.0])              # from <geom pos="1 0 0.02">
+            goal_half_extent = np.array([0.15, 0.15])       # from <size="0.15 0.15 0.02">
+            goal_top_z = 0.06                               # center z=0.02 + half-height z=0.02
+            z_tolerance = 0.015                             # slightly more relaxed to tolerate sim noise
 
-            within_x = abs(cube_pos[0] - goal_center[0]) <= goal_half_extent[0]
-            within_y = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
+            x_cond = abs(cube_pos[0] - goal_center[0]) <= goal_half_extent[0]
+            y_cond = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
+            z_cond = abs(cube_pos[2] - goal_top_z) <= z_tolerance
 
-            reward = within_x and within_y
-
+            # print([x_cond, y_cond, z_cond])
+            reward = x_cond and y_cond and z_cond
 
         elif self.task == "open":
             door_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
@@ -579,6 +589,32 @@ class CommonMujocoSim:
             angle_thresh = -np.pi / 8
             reward = door_angle < angle_thresh
         return reward
+
+    def is_local_success(self):
+        if self.current_task in ["cube", "pick_green_cube"]:
+            cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
+            return cube_pos[2] > 0.10
+
+        elif self.current_task == "place_green_cube":
+            cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
+                
+            goal_center = np.array([1.0, 0.0])              # from <geom pos="1 0 0.02">
+            goal_half_extent = np.array([0.15, 0.15])       # from <size="0.15 0.15 0.02">
+            goal_top_z = 0.06                               # center z=0.02 + half-height z=0.02
+            z_tolerance = 0.015                             # slightly more relaxed to tolerate sim noise
+
+            x_cond = abs(cube_pos[0] - goal_center[0]) <= goal_half_extent[0]
+            y_cond = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
+            z_cond = abs(cube_pos[2] - goal_top_z) <= z_tolerance
+            return (x_cond and y_cond and z_cond)
+
+        elif self.current_task == "open":
+            right_door_angle = self.data.sensordata[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")]
+            return right_door_angle > 0.5
+
+        elif self.current_task == "dishwasher":
+            door_angle = self.data.sensordata[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "door")]
+            return door_angle < (-np.pi / 8)
 
     def reset(self):
         pass
@@ -638,12 +674,13 @@ class CommonMujocoEnv:
         self.reward = 0
 
         self.task = self.cfg.task
+        self.current_task = None
         
         assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
         if self.task in ["cube", "cube_size", "cube_distractor", "cube_specified"]:
             self.max_num_step = 325
         elif self.task == "cube_longhorizon":
-            self.max_num_step = 800
+            self.max_num_step = 600
         elif self.task == "open":
             self.max_num_step = 800
         elif self.task == "dishwasher":
@@ -763,6 +800,7 @@ class CommonMujocoEnv:
             'arm_quat': arm_quat,
             'gripper_pos': gripper_pos,
             'reward': self.shm_state.reward.copy(),
+            'local_reward': self.shm_state.local_reward.copy(),
             'proprio': np.hstack((arm_pos, arm_quat, gripper_pos, base_pose))
         }
 
@@ -1215,7 +1253,7 @@ class CommonMujocoEnv:
         return reached, pos_error_norm, step
 
 ######## NEW ADDED HARDCODED DEMO LOGIC
-    def scripted_pick(self, cube_pos, goal_pos, annotations, total_steps):
+    def scripted_pick(self, cube_pos, annotations, total_steps):
         approach_offset = np.array([0, 0, 0.08])  
         prepick_offset = np.array([0, 0, 0.05])
         lifted_offset = np.array([0, 0, 0.12])
@@ -1293,7 +1331,7 @@ class CommonMujocoEnv:
         [cube1, goal1] = cube_positions
         self._dump_or_check_env_cfg()
         # pdb.set_trace()
-        self.scripted_pick(cube1, goal1, [], 0)
+        self.scripted_pick(cube1, [], 0)
         # pdb.set_trace()
         print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
         # self.reset()

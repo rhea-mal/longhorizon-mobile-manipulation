@@ -35,6 +35,8 @@ def eval_waypoint(
     env.seed(seed)
     env.reset()
     obs = env.get_obs()
+    cube1 = np.array([1.0, 0.4, 0.0])
+    # env.scripted_pick(cube1, [], 0)
 
     recorder = None
     if record:
@@ -105,7 +107,7 @@ def _eval_waypoint_multi_episode(
 ):
     scores = []
     num_steps = []
-    for seed in range(seed, seed + num_episode):
+    for seed in range(seed, seed + num_episode + 100):
         score, num_step = eval_waypoint(
             policy,
             env_cfg,
@@ -206,6 +208,8 @@ if __name__ == "__main__":
     ## On a workstation with a display
     # python scripts/eval_waypoint.py --model exps/waypoint/cube_wbc/latest.pt --env_cfg envs/cfgs/cube_wbc.yaml 
 
+    # python scripts/eval_waypoint.py --model exps/waypoint/longhorizon/pick_green_cube/latest.pt --env_cfg envs/cfgs/cube_wbc_longhorizon.yaml 
+    
     ## Otherwise, for headless
     # xvfb-run -s "-screen 0 1920x1080x24" python scripts/eval_waypoint.py --model exps/waypoint/cube_wbc_triton/latest.pt --env_cfg envs/cfgs/cube_wbc.yaml --headless
     main()
