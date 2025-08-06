@@ -2,12 +2,12 @@
 
 #SBATCH --partition=iris-hi
 #SBATCH --chdir=/iris/u/rheamal/homer
-#SBATCH --output=slurm/pickonly-%j.out
-#SBATCH --error=slurm/pickonly-%j.err
-#SBATCH --job-name=pick
+#SBATCH --output=slurm/annotations_dense.out
+#SBATCH --error=slurm/annotations_dense.err
+#SBATCH --job-name=dense
 #SBATCH --time=20:00:00
 #SBATCH --cpus-per-task=20
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem-per-cpu=20G
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --account=iris
@@ -20,6 +20,5 @@ echo "Activating environment..."
 source ~/.bashrc
 conda activate tidybot2
 
-python scripts/train_waypoint.py --config_path cfgs/waypoint/cube_lh_pickonly_wbc.yaml
-
+python dataset_utils/fix_annotations.py
 echo "Job completed at $(date)"

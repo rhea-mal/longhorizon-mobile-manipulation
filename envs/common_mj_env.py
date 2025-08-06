@@ -323,7 +323,7 @@ class CommonMujocoSim:
         self.show_viewer = show_viewer
 
         self.task = task
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "drawer", "dishwasher"]
         
         # Enable gravity compensation for everything except objects
         self.model.body_gravcomp[:] = 1.0
@@ -485,6 +485,28 @@ class CommonMujocoSim:
             self.data.qpos[qpos_adr : qpos_adr + 3] = cube
 
             mujoco.mj_forward(self.model, self.data)
+        elif self.task == "drawer":
+            if cube_positions:
+                [cube1, goal1, cube2, goal2] = cube_positions
+            else:
+                cube1 = np.array([1.5, 0.1, 0.85])
+                cube2 = np.array([1.5, -0.1, 0.85])
+                # Optional drawer goal positions (not used here but can be for success condition later)
+                goal1 = np.array([1.45, 0, 0.7])
+                goal2 = np.array([1.45, 0, 0.7])
+
+            default_quat = np.array([1, 0, 0, 0])  # identity quaternion
+
+            joint_id1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "cube1_joint")
+            qpos_adr1 = self.model.jnt_qposadr[joint_id1]
+            self.data.qpos[qpos_adr1 : qpos_adr1 + 7] = np.concatenate([cube1, default_quat])
+
+            joint_id2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "cube2_joint")
+            qpos_adr2 = self.model.jnt_qposadr[joint_id2]
+            self.data.qpos[qpos_adr2 : qpos_adr2 + 7] = np.concatenate([cube2, default_quat])
+
+            mujoco.mj_forward(self.model, self.data)
+
 
         elif self.task == "cube_specified":
             # Define bounds
@@ -573,9 +595,29 @@ class CommonMujocoSim:
             x_cond = abs(cube_pos[0] - goal_center[0]) <= goal_half_extent[0]
             y_cond = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
             z_cond = abs(cube_pos[2] - goal_top_z) <= z_tolerance
-
-            # print([x_cond, y_cond, z_cond])
             reward = x_cond and y_cond and z_cond
+        elif self.task == "drawer":
+            cube1 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "cube1")]
+            cube2 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "cube2")]
+            drawer_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "studyTable_Drawer")]
+
+            # Define bounding box extents relative to drawer_pos
+            X_RANGE = (-0.24, 0.24)
+            Y_RANGE = (-0.26, 0.26)
+            Z_RANGE = (-0.05, 0.05)  # since drawer_pos.z = 0.655, this gives [0.605, 0.705]
+
+            def is_inside_drawer(cube_pos):
+                rel = cube_pos - drawer_pos
+                return (
+                    X_RANGE[0] <= rel[0] <= X_RANGE[1] and
+                    Y_RANGE[0] <= rel[1] <= Y_RANGE[1] and
+                    Z_RANGE[0] <= rel[2] <= Z_RANGE[1]
+                )
+
+            cube1_in_drawer = is_inside_drawer(cube1)
+            cube2_in_drawer = is_inside_drawer(cube2)
+
+            reward = cube1_in_drawer and cube2_in_drawer
 
         elif self.task == "open":
             door_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "rightdoorhinge")
@@ -676,10 +718,10 @@ class CommonMujocoEnv:
         self.task = self.cfg.task
         self.current_task = None
         
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher", "drawer"]
         if self.task in ["cube", "cube_size", "cube_distractor", "cube_specified"]:
             self.max_num_step = 325
-        elif self.task == "cube_longhorizon":
+        elif self.task in ["cube_longhorizon", "drawer"] :
             self.max_num_step = 600
         elif self.task == "open":
             self.max_num_step = 800
@@ -693,7 +735,8 @@ class CommonMujocoEnv:
             'cube_longhorizon': "mj_assets/stanford_tidybot2/cube_longhorizon.xml",
             'cube_specified': "mj_assets/stanford_tidybot2/cube_specified.xml",
             'open': "mj_assets/stanford_tidybot2/open.xml",
-            'dishwasher': "mj_assets/stanford_tidybot2/dishwasher.xml"
+            'dishwasher': "mj_assets/stanford_tidybot2/dishwasher.xml",
+            'drawer': "mj_assets/stanford_tidybot2/drawer.xml"
         }
         self.mjcf_path = TASK_TO_MJCF_PATH[self.cfg.task]
 
@@ -1149,7 +1192,7 @@ class CommonMujocoEnv:
                          recorder=None, MAX_STEP=50, mode="pick"):
 
         def record_delta(prev_obs, curr_obs, gripper_pos):
-            if self.recorder is None or mode=="pick":
+            if self.recorder is None:
                 return
 
             curr_quat = curr_obs['arm_quat']
@@ -1256,13 +1299,17 @@ class CommonMujocoEnv:
     def scripted_pick(self, cube_pos, annotations, total_steps):
         approach_offset = np.array([0, 0, 0.08])  
         prepick_offset = np.array([0, 0, 0.05])
-        lifted_offset = np.array([0, 0, 0.12])
-        cylinder_height = np.array([0, 0, 0.05])
+        lifted_offset = np.array([0, 0, 0.15])
+        cylinder_height = np.array([0, 0, 0])
 
         MAX_STEP = 35
-        def append_annotation(n):
-            annotations.append(ActMode.ArmWaypoint)
-            annotations.extend([ActMode.Interpolate] * (n - 1))
+        def append_annotation(n, mode="waypoint"):
+            if mode == "waypoint":
+                annotations.append(ActMode.ArmWaypoint)
+                annotations.extend([ActMode.Interpolate] * (n - 1))
+            if mode == "dense":
+                annotations.extend([ActMode.Dense] * (n))
+
         # Approach Cube
         _, _, n = self.move_to_arm_waypoint_hardcoded(
             target_arm_pos=cube_pos + approach_offset,
@@ -1295,11 +1342,9 @@ class CommonMujocoEnv:
         return annotations, total_steps
 
 
-    def scripted_place(self, cube_pos, goal_pos, annotations, total_steps):
-        approach_offset = np.array([0, 0, 0.08])  
-        prepick_offset = np.array([0, 0, 0.05])
-        lifted_offset = np.array([0, 0, 0.12])
-        cylinder_height = np.array([0, 0, 0.05])
+    def scripted_place(self, goal_pos, annotations, total_steps):
+        approach_offset = np.array([0, 0, 0.08])
+        lifted_offset = np.array([0, 0, 0.2])
 
         def append_annotation(n):
             annotations.append(ActMode.ArmWaypoint)
@@ -1307,7 +1352,7 @@ class CommonMujocoEnv:
 
         # Move to goal
         _, _, n = self.move_to_arm_waypoint_hardcoded(
-            target_arm_pos=goal_pos + lifted_offset + cylinder_height,
+            target_arm_pos=goal_pos + lifted_offset,
             target_arm_quat=np.array([1, 1, 0, 0]),
             target_gripper_pos=1.0,
             MAX_STEP=30, mode="place"
@@ -1317,7 +1362,17 @@ class CommonMujocoEnv:
 
         # Lower to goal + open
         _, _, n = self.move_to_arm_waypoint_hardcoded(
-            target_arm_pos=goal_pos + approach_offset + cylinder_height,
+            target_arm_pos=goal_pos + approach_offset,
+            target_arm_quat=np.array([1, 1, 0, 0]),
+            target_gripper_pos=0.0,
+            MAX_STEP=15, mode="place"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # Lift off
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=goal_pos + lifted_offset,
             target_arm_quat=np.array([1, 1, 0, 0]),
             target_gripper_pos=0.0,
             MAX_STEP=15, mode="place"
@@ -1326,18 +1381,150 @@ class CommonMujocoEnv:
         append_annotation(n)
         return annotations, total_steps
 
+    def scripted_draweropen(self, annotations, total_steps):
+        drawer_handle = np.array ([1.14, 0, 0.70])
 
-    def hardcoded_episode(self, cube_positions):
-        [cube1, goal1] = cube_positions
-        self._dump_or_check_env_cfg()
-        # pdb.set_trace()
-        self.scripted_pick(cube1, [], 0)
-        # pdb.set_trace()
-        print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
-        # self.reset()
-        self.seed(self.recorder.episode_idx)
-        annotations, total_steps = self.scripted_place(cube1, goal1, [], 0)
-        episode_fn = os.path.join("dev1/", f"demo{self.recorder.episode_idx:05d}.pkl")
-        self.recorder.end_episode(save=True)
-        print(Fore.GREEN + "Episode complete and saved!" + Style.RESET_ALL)
-        return annotations, episode_fn
+        # Offsets for approaching from front
+        approach_offset = np.array([0, 0, 0.08])     # Stand a bit in front of the handle
+        pull_offset = np.array([-0.2, 0, 0])          # Pull drawer along −Y
+        retreat_offset = np.array([-0.08, 0, 0.08])      # Retreat slightly
+
+        quat = np.array([0.707, 0, 0, 0])         # End-effector forward along +Y
+
+        MAX_STEP = 35
+
+        def append_annotation(n):
+            annotations.append(ActMode.ArmWaypoint)
+            annotations.extend([ActMode.Interpolate] * (n - 1))
+
+        # 1. Approach in front of the handle (from -Y)
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + approach_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # open
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 2. Move forward to grab the handle
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle,
+            target_arm_quat=quat,
+            target_gripper_pos=1.0,  # close gripper
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 3. Pull back (open the drawer along +Y, so hand moves along –Y)
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + pull_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # hold tight
+            MAX_STEP=15, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 4. Release and retreat
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + pull_offset + retreat_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # release gripper
+            MAX_STEP=10, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        return annotations, total_steps
+    
+    def scripted_drawerclose(self, annotations, total_steps):
+        drawer_handle = np.array ([0.95, 0, 0.70])
+
+        # Offsets for approaching from front
+        approach_offset = np.array([0, 0, 0.08])     # Stand a bit in front of the handle
+        push_offset = np.array([0.2, 0, 0])         
+        retreat_offset = np.array([-0.08, 0, 0.08])      
+
+        quat = np.array([0.707, 0, 0, 0])    
+
+        MAX_STEP = 35
+
+        def append_annotation(n):
+            annotations.append(ActMode.ArmWaypoint)
+            annotations.extend([ActMode.Interpolate] * (n - 1))
+
+        # 1. Approach in front of the handle (from -Y)
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + approach_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # open
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 2. Move forward to grab the handle
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle,
+            target_arm_quat=quat,
+            target_gripper_pos=1.0,  # close gripper
+            MAX_STEP=MAX_STEP, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 3. Push back (open the drawer along +Y, so hand moves along –Y)
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + push_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # hold tight
+            MAX_STEP=15, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        # 4. Release and retreat
+        _, _, n = self.move_to_arm_waypoint_hardcoded(
+            target_arm_pos=drawer_handle + push_offset + retreat_offset,
+            target_arm_quat=quat,
+            target_gripper_pos=0.0,  # release gripper
+            MAX_STEP=10, mode="pick"
+        )
+        total_steps += n
+        append_annotation(n)
+
+        return annotations, total_steps
+
+
+
+    def hardcoded_episode(self, cube_positions, env_cfg):
+        if env_cfg == "cube_wbc_longhorizon.yaml":
+            [cube1, goal1] = cube_positions
+            self._dump_or_check_env_cfg()
+            self.scripted_pick(cube1, [], 0)
+            print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
+            # self.reset()
+            self.seed(self.recorder.episode_idx)
+            annotations, total_steps = self.scripted_place(cube1, goal1, [], 0)
+            episode_fn = os.path.join("dev1/", f"demo{self.recorder.episode_idx:05d}.pkl")
+            self.recorder.end_episode(save=True)
+            print(Fore.GREEN + "Episode complete and saved!" + Style.RESET_ALL)
+            return annotations, episode_fn
+        if env_cfg == "drawer.yaml":
+            [cube1, goal1, cube2, goal2] = cube_positions
+            self._dump_or_check_env_cfg()
+            print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
+            self.seed(self.recorder.episode_idx)
+
+            annotations, total_steps = self.scripted_draweropen([], 0) # open drawer: DENSE
+            annotations, total_steps = self.scripted_pick(cube1, annotations, total_steps) #pick green cube: WAYPOINT
+            annotations, total_steps = self.scripted_place(goal1, annotations, total_steps) # place green cube: WAYPOINT
+            annotations, total_steps = self.scripted_pick(cube2, annotations, total_steps) #pick blue cube WAYPOINT
+            annotations, total_steps = self.scripted_place(goal2, annotations, total_steps) # place blue cube WAYPOINT
+            annotations, total_steps = self.scripted_drawerclose(annotations, total_steps) # close drawer DENSE
+            episode_fn = os.path.join("dev1/", f"demo{self.recorder.episode_idx:05d}.pkl")
+            self.recorder.end_episode(save=True)
+            print(Fore.GREEN + "Episode complete and saved!" + Style.RESET_ALL)
+            return annotations, episode_fn

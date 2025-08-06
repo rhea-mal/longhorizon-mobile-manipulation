@@ -2,9 +2,9 @@
 
 #SBATCH --partition=iris-hi
 #SBATCH --chdir=/iris/u/rheamal/homer
-#SBATCH --output=slurm/drawer_homer_waypoint-%j.out
-#SBATCH --error=slurm/drawer_homer_waypoint-%j.err
-#SBATCH --job-name=drawHOMERwaypoint
+#SBATCH --output=slurm/drawer_1dense.out
+#SBATCH --error=slurm/drawer_1dense.err
+#SBATCH --job-name=1dense
 #SBATCH --time=20:00:00
 #SBATCH --cpus-per-task=20
 #SBATCH --mem-per-cpu=20G
@@ -19,7 +19,7 @@ echo "Activating environment..."
 # Load environment
 source ~/.bashrc
 conda activate tidybot2
-
-python scripts/train_waypoint.py --config_path cfgs/waypoint/drawer_longhorizon_waypoint.yaml
-echo "HOMER waypoint drawer waypoint"
+pip install rich
+python scripts/train_dense.py --config_path cfgs/dense/drawer_longhorizon.yaml
+echo "drawer 1 single dense policy"
 echo "Job completed at $(date)"
