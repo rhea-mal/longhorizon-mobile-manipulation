@@ -6,6 +6,10 @@ import spatialmath as sm
 import spatialmath.base as smb
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+# filepath: /Users/rheamalhotra/Desktop/robotics/homer/envs/utils/camera_utils.py
+import sys
+sys.path.append('/Users/rheamalhotra/Desktop/robotics/homer/Inpaint-Anything')
+from remove_anything_gemini import inpaint
 
 def deproject_pixel_to_3d(obs, pixel, camera_name, env_cfg):
     """
@@ -144,6 +148,61 @@ def pcl_from_obs(obs, env_cfg, vis=False, cam_names=None):
 
     return merged_points, merged_colors
 
+input_img = "Inpaint-Anything/example/remove-anything/dog.jpg"
+object_name = "the bowl"
+inpaint(input_img, object_name)
+
+
+def pcl_from_obs_inpainted(obs, env_cfg, object_name, vis=False, cam_names=None):
+    merged_points = []
+    merged_colors = []
+
+    cam_list = cam_names if cam_names is not None else env_cfg.pcl_cameras
+
+    for view in cam_list:
+        input_img = obs['%s_image' % view]
+        rgb_image = inpaint(input_img, object_name, path=False)
+        depth_image = obs['%s_depth' % view]
+
+        if env_cfg.is_sim:
+            T = obs['%s_T' % view]
+            K = obs['%s_K' % view]
+            base_units = 0
+        else:
+            T = env_cfg.extrinsics[view]
+            K = env_cfg.intrinsics[view]
+            base_units = -3
+
+        crop_min_bound = env_cfg.min_bound
+        crop_max_bound = env_cfg.max_bound
+
+        points = depth_to_point_cloud(depth_image, K, T, base_units=base_units)
+        colors = rgb_image.reshape(points.shape) / 255.0
+
+        if crop_min_bound and crop_max_bound:
+            x_mask = (points[..., 0] >= crop_min_bound[0]) & (points[..., 0] <= crop_max_bound[0])
+            y_mask = (points[..., 1] >= crop_min_bound[1]) & (points[..., 1] <= crop_max_bound[1])
+            z_mask = (points[..., 2] >= crop_min_bound[2]) & (points[..., 2] <= crop_max_bound[2])
+            xyz_mask = x_mask & y_mask & z_mask
+
+            points = points[xyz_mask]
+            colors = colors[xyz_mask]
+
+        merged_points.append(points)
+        merged_colors.append(colors)
+
+    merged_points = np.vstack(merged_points)
+    merged_colors = np.vstack(merged_colors)
+
+    if vis:
+        import open3d as o3d
+        # Create an Open3D PointCloud object
+        point_cloud = o3d.geometry.PointCloud()
+        point_cloud.points = o3d.utility.Vector3dVector(merged_points)
+        point_cloud.colors = o3d.utility.Vector3dVector(merged_colors)
+        o3d.visualization.draw_geometries([point_cloud])
+
+    return merged_points, merged_colors
 
 def make_tf(
     pos: Union[np.ndarray, list] = [0, 0, 0],

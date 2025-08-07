@@ -11,5 +11,5 @@ pcl_cameras:
   - wrist
 task: drawer
 data_folder: dev1
-min_bound: [-inf, -inf, 0.02]
-max_bound: [inf, inf, inf]
+min_bound: [0, -1, 0.5]
+max_bound: [2.5, 1, 1.3]

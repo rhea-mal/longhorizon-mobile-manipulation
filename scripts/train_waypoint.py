@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 import diffusers
 import pyrallis
 import numpy as np
+import pdb
 
 import common_utils
 from dataset_utils.waypoint_dataset import PointCloudDataset, PointCloudDatasetConfig

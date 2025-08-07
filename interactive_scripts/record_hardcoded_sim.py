@@ -8,7 +8,7 @@ import pickle
 import pdb
 import time
 
-def wait_for_file_complete(path, timeout=20):
+def wait_for_file_complete(path, timeout=35):
     start = time.time()
     last_size = -1
 
