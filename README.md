@@ -7,7 +7,9 @@
 
 ## Overview
 
-We build a long horizon **HoMeR** (Hybrid Whole-Body Policies for Mobile Robots) as an a hybrid imitation learning framework for mobile manipulation. It combines KISA automated keyframe and keypoint labeling with whole-body control with a hybrid action representation to achieve generalizable and precise robot behavior in both simulation and real-world settings.
+We present a long horizon mobile manipulation framework built upon **HoMeR** (Hybrid Whole-Body Policies for Mobile Robots) as an a hybrid imitation learning framework for mobile manipulation. It combines high level Gemini / GPT4o planner for single task policy chaining. With LAMA segmentation and inpainting, single task policies can be combined for generalized skill variants unseen without requiring fine tuning of a large generalist model.
+
+Automated KISA task parsing and keyframe + keypoint labeling with whole-body control with a hybrid action representation achieves generalizable and precise robot behavior in both simulation and real-world settings.
 
 <table>
   <tr>
@@ -27,8 +29,6 @@ We build a long horizon **HoMeR** (Hybrid Whole-Body Policies for Mobile Robots)
 ---
 
 ### 🖥️ Simulation-Only
-
-If you are **only using simulation**, refer to:
 
 📄 [`SIM.md`](SIM.md)
 

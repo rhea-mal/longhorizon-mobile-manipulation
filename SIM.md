@@ -48,12 +48,14 @@ tar --use-compress-program=unzstd -xvf dev_<task>_<action_space>.tar.zst
 ```
 Locally, `homer/data` should now contain datasets such as `homer/data/dev_<cube/dishwasher/cabinet>_<wbc/base_arm>`.
 
+
+
 ### 2. Training
 
-Our paper introduces two key agent variants:
+Two key training frameworks are:
 
 - **HoMeR**: combines a keypose policy and a dense policy under a whole-body control (WBC) action space. The keypose policy predicts both salient points and end-effector actions.
-- **HoMeR-Cond**: a variant of HoMeR where the keypose policy is externally conditioned on salient points at test time, rather than predicting them.
+- **HoMeR-Cond**: a language conditioned variant of HoMeR where the keypose policy is externally conditioned on salient points at test time, rather than predicting them.
 
 We compare against approaches which:
 - Use decoupled base+arm control instead of WBC (**HoMeR-B+A**)
@@ -152,6 +154,13 @@ Make sure that `homer/exps` now contains subfolders `waypoint` and `dense` with 
 
 #### Sim Tasks
 
+
+Drawer
+```bash
+python scripts/eval_dense.py -d exps/dense/drawer_longhorizon_dense/latest.pt --num_episode 20 -e envs/cfgs/drawer.yaml
+```
+
+
 Open Cabinet
 - HoMeR: 
 ```bash
@@ -220,7 +229,7 @@ python scripts/eval_waypoint_cond.py --model exps/waypoint/cube_wbc_cond/latest.
 
 ## Data Collection
 
-### Step 1: Teleoperate and record
+### Step 1A: Teleoperate and record
 Ex: Cube Task with WBC Action Space
 - First, edit `constants.py` and set `TELEOP_HOST` to `0.0.0.0` or `localhost`
 - Then:
@@ -257,6 +266,21 @@ mjpython interactive_scripts/replay_sim.py --data_dir dev1 # Mac
 ```
 
 NOTE: We collected 20 demos per simulated task in our experiments.
+
+
+### Step 1B: Hardcoded Demo Recording in Sim
+Instead of teleop, you can also use hardcoded task endpoints within:
+```bash
+python interactive_scripts/record_hardcoded_sim.py
+```
+where trajectory is defined in envs/common_mj_env.py. Modes are already annotated, however salient points must still be selected with the following script:
+```bash
+python interactive_scripts/annotate_salient_points.py
+```
+Remove stale actions for pauses between hardcoded actions with 
+```bash
+python dataset_utils/filter_zero_actions.py --src_dir {DATA DIRECTORY}
+```
 
 ---
 
@@ -310,5 +334,9 @@ mjpython interactive_scripts/record_sim.py --env_cfg envs/cfgs/<task>_<wbc/base_
 ```
 - Debugging tip:
   - If you get `ValueError: keyframe 0: invalid qpos size`, adjust the `home` keyframe in the XML to match joint dimensions.
+  - Use replay demo to make sure no stale keys result in pauses from hardcoded teleop:
+```bash
+mjpython interactive_scripts/replay_sim.py --data_dir {DATADIR}
+```
 
 ---
