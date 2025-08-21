@@ -323,7 +323,7 @@ class CommonMujocoSim:
         self.show_viewer = show_viewer
 
         self.task = task
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "drawer", "dishwasher"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_longhorizon_2cubes", "cube_specified", "open", "drawer", "dishwasher"]
         
         # Enable gravity compensation for everything except objects
         self.model.body_gravcomp[:] = 1.0
@@ -485,6 +485,33 @@ class CommonMujocoSim:
             self.data.qpos[qpos_adr : qpos_adr + 3] = cube
 
             mujoco.mj_forward(self.model, self.data)
+                ## move cube to goal region
+        elif self.task == "cube_longhorizon_2cubes":
+            if cube_positions:
+                [cube1, goal1, cube2, goal2] = cube_positions
+            else:
+                def noise(x_range, y_range):
+                    return np.array([
+                        np.random.uniform(*x_range),
+                        np.random.uniform(*y_range),
+                        0
+                    ])
+                cube1 = np.array([1.0,  0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
+                cube2 = np.array([1.0,  -0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
+                goal1 = np.array([1.0,  0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
+                goal2 = np.array([1.0,  -0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
+
+            # Set positions in qpos
+            joint_id1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "interactive_obj_freejoint")
+            qpos_adr1 = self.model.jnt_qposadr[joint_id1]
+            self.data.qpos[qpos_adr1 : qpos_adr1 + 3] = cube1
+
+            joint_id2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "interactive_obj_freejoint2")
+            qpos_adr2 = self.model.jnt_qposadr[joint_id2]
+            self.data.qpos[qpos_adr2 : qpos_adr2 + 3] = cube2
+
+            mujoco.mj_forward(self.model, self.data)
+
         elif self.task == "drawer":
             if cube_positions:
                 [cube1, goal1, cube2, goal2] = cube_positions
@@ -596,6 +623,20 @@ class CommonMujocoSim:
             y_cond = abs(cube_pos[1] - goal_center[1]) <= goal_half_extent[1]
             z_cond = abs(cube_pos[2] - goal_top_z) <= z_tolerance
             reward = x_cond and y_cond and z_cond
+        elif self.task == "cube_longhorizon_2cubes":
+            cube_pos1 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
+            cube_pos2 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj2")]
+            
+            goal_center = np.array([1.0, 0.0])              # from <geom pos="1 0 0.02">
+            goal_half_extent = np.array([0.15, 0.15])       # from <size="0.15 0.15 0.02">
+            goal_top_z = 0.06                               # center z=0.02 + half-height z=0.02
+            z_tolerance = 0.015                             # slightly more relaxed to tolerate sim noise
+
+            x_cond = abs(cube_pos1[0] - goal_center[0]) <= goal_half_extent[0] and abs(cube_pos2[0] - goal_center[0]) <= goal_half_extent[0]
+            y_cond = abs(cube_pos1[1] - goal_center[1]) <= goal_half_extent[1] and abs(cube_pos2[1] - goal_center[1]) <= goal_half_extent[1]
+            z_cond = abs(cube_pos1[2] - goal_top_z) <= z_tolerance and abs(cube_pos2[2] - goal_top_z) <= z_tolerance
+            reward = x_cond and y_cond and z_cond
+
         elif self.task == "drawer":
             cube1 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "cube1")]
             cube2 = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "cube2")]
@@ -718,10 +759,10 @@ class CommonMujocoEnv:
         self.task = self.cfg.task
         self.current_task = None
         
-        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon", "cube_specified", "open", "dishwasher", "drawer"]
+        assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon_2cubes", "cube_longhorizon", "cube_specified", "open", "dishwasher", "drawer"]
         if self.task in ["cube", "cube_size", "cube_distractor", "cube_specified"]:
             self.max_num_step = 325
-        elif self.task in ["cube_longhorizon", "drawer"] :
+        elif self.task in ["cube_longhorizon", "cube_longhorizon_2cubes", "drawer"] :
             self.max_num_step = 600
         elif self.task == "open":
             self.max_num_step = 800
@@ -733,6 +774,7 @@ class CommonMujocoEnv:
             'cube_size': "mj_assets/stanford_tidybot2/cube_size.xml",
             'cube_distractor': "mj_assets/stanford_tidybot2/cube_distractor.xml",
             'cube_longhorizon': "mj_assets/stanford_tidybot2/cube_longhorizon.xml",
+            'cube_longhorizon_2cubes': "mj_assets/stanford_tidybot2/cube_longhorizon_2cubes.xml",
             'cube_specified': "mj_assets/stanford_tidybot2/cube_specified.xml",
             'open': "mj_assets/stanford_tidybot2/open.xml",
             'dishwasher': "mj_assets/stanford_tidybot2/dishwasher.xml",
@@ -1500,6 +1542,19 @@ class CommonMujocoEnv:
 
 
     def hardcoded_episode(self, cube_positions, env_cfg):
+        if env_cfg == "cube_wbc_longhorizon_2cubes.yaml":
+            [cube1, goal1, cube2, goal2] = cube_positions
+            self._dump_or_check_env_cfg()
+            print(Fore.BLUE + f"Recording episode {self.recorder.episode_idx}" + Style.RESET_ALL)
+            self.seed(self.recorder.episode_idx)
+            annotations, total_steps = self.scripted_pick(cube1, [], 0)
+            annotations, total_steps = self.scripted_place(goal1, annotations, total_steps)
+            annotations, total_steps = self.scripted_pick(cube2, annotations, total_steps)
+            annotations, total_steps = self.scripted_place(goal2, annotations, total_steps)
+            episode_fn = os.path.join("dev1/", f"demo{self.recorder.episode_idx:05d}.pkl")
+            self.recorder.end_episode(save=True)
+            print(Fore.GREEN + "Episode complete and saved!" + Style.RESET_ALL)
+            return annotations, episode_fn
         if env_cfg == "cube_wbc_longhorizon.yaml":
             [cube1, goal1] = cube_positions
             self._dump_or_check_env_cfg()

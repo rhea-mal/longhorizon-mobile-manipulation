@@ -23,6 +23,12 @@ def wait_for_file_complete(path, timeout=35):
     raise TimeoutError(f"Timed out waiting for file to be fully written: {path}")
 
 def generate_cube_positions(env_name):
+    def noise(x_range, y_range):
+        return np.array([
+            np.random.uniform(*x_range),
+            np.random.uniform(*y_range),
+            0
+        ])
     if env_name == "cube_wbc_longhorizon.yaml":
         base_pos2 = np.array([1.0,  0.4, 0.0]) 
         goal_pos2 = np.array([1.0,  0.08, 0.0])
@@ -41,14 +47,15 @@ def generate_cube_positions(env_name):
         goal2[:2] += noise_g2
 
         return [cube2, goal2]
-    if env_name == "drawer.yaml":
-        def noise(x_range, y_range):
-            return np.array([
-                np.random.uniform(*x_range),
-                np.random.uniform(*y_range),
-                0
-            ])
+    if env_name == "cube_wbc_longhorizon_2cubes.yaml":
+        cube1 = np.array([1.0,  0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
+        cube2 = np.array([1.0,  -0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
+        goal1 = np.array([1.0,  0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
+        goal2 = np.array([1.0,  -0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
 
+        return [cube1, goal1, cube2, goal2]
+
+    if env_name == "drawer.yaml":
         cube1 = np.array([1.3, 0.2, 0.75]) + noise((-0.05, 0.05), (-0.2, 0.2))
         cube2 = np.array([1.3, -0.2, 0.75]) + noise((-0.05, 0.05), (-0.2, 0.2))
         goal1 = np.array([1.15, 0.1, 0.7]) + noise((-0.05, 0.05), (-0.05, 0.05))
@@ -58,7 +65,7 @@ def generate_cube_positions(env_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/drawer.yaml")
+    parser.add_argument("--env_cfg", type=str, default="envs/cfgs/cube_wbc_longhorizon_2cubes.yaml")
     args = parser.parse_args()
     env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))
     env_name = args.env_cfg.split('/')[-1]

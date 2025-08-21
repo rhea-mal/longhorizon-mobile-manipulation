@@ -4,25 +4,21 @@ from tqdm import tqdm
 from interactive_scripts.dataset_recorder import ActMode
 
 # Folder paths
-input_dir = "data/dev_drawer_longhorizon_waypoint"
-output_root = "data/dev_drawer_longhorizon_alldense"
+input_dir = "data/dev_cube_longhorizon_2cubes_waypoint"
+output_root = "data/dev_cube_longhorizon_2cubes_allwaypoint"
 
 # Mapping of segment name to how many chunks it should consume
 segment_chunks = {
-    "open_drawer": 4,
     "pick_green": 3,
     "place_green": 3,
     "pick_blue": 3,
     "place_blue": 3,
-    "close_drawer": 4
 }
 
 def find_segments(annotations):
     # Extract start indices of all waypoint annotations
     indices = [i for i, a in enumerate(annotations) if a['mode'] in [ActMode.ArmWaypoint, ActMode.BaseWaypoint]]
-    if len(indices) != 20:
-        raise ValueError(f"Expected 20 waypoint segments (got {len(indices)})")
-
+    
     segments = []
     for i in range(len(indices)):
         start = indices[i]
@@ -56,9 +52,9 @@ def process_demo(demo_path):
             start, end = segments[seg_pointer]
             combined.extend(annotations[start:end])
             seg_pointer += 1
-        relabeled = relabel_segment(combined)
+        # relabeled = relabel_segment(combined) I want waypoint right now
         out_path = os.path.join(output_root, seg_name, demo_id)
-        save_segment(relabeled, out_path)
+        save_segment(combined, out_path)
 
 if __name__ == "__main__":
     for file in tqdm(sorted(os.listdir(input_dir))):

@@ -21,4 +21,4 @@ weight_decay: 1e-6
 cosine_schedule: 1
 lr_warm_up_steps: 500
 use_wb: 1
-save_dir: exps/dense/cube_wbc_delta_allcams
+save_dir: exps/dense/cube_wbc_delta_allcams_trained

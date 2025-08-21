@@ -75,8 +75,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--indir", default="data/dev_drawer_longhorizon_waypoint", help="Path to input drawer directory of .pkl files")
-    parser.add_argument("--outdir", default="data/dev_drawer_longhorizon_homer_waypoint", help="Path to save relabeled .pkl files")
+    parser.add_argument("--indir", default="data/dev_cube_longhorizon_wbc", help="Path to input drawer directory of .pkl files")
+    parser.add_argument("--outdir", default="data/dev_cube_longhorizon_1dense", help="Path to save relabeled .pkl files")
     args = parser.parse_args()
 
     print(f"[INFO] Scanning directory: {args.indir}")
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             input_path = os.path.join(args.indir, fname)
             output_path = os.path.join(args.outdir, fname)
             print(f"\n[INFO] --- Processing {fname} ---")
-            relabel_drawer_homer(input_path, output_path)
+            relabel_drawer_all_dense(input_path, output_path)
             count += 1
 
     print(f"\n[INFO] Done. Processed {count} files.")

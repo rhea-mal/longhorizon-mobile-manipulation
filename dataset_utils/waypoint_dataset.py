@@ -177,7 +177,7 @@ def _process_episodes(fns: list[str],
         target_mode = data[0]["mode"]
         for t, step in enumerate(list(data)):
             mode = step["mode"]
-            print(mode, step["action"])
+            # print(mode, step["action"])
 
             if mode == ActMode.ArmWaypoint:
                 if data[t + 1]["mode"] == ActMode.ArmWaypoint:
@@ -288,7 +288,8 @@ def _process_episodes(fns: list[str],
             user_clicks = np.zeros((len(points),)).astype(points.dtype)
             user_clicks[click_idxs] = 1.0
 
-            if user_clicks.sum() < 300.0:
+            # if user_clicks.sum() < 300.0:
+            if user_clicks.sum() < 600.0:
                 continue
 
             assert user_clicks.sum() != 0
@@ -548,7 +549,8 @@ class PointCloudDataset(Dataset):
 def main():
     cfg = PointCloudDatasetConfig(
         #path="data/dev_wiping_wbc",
-        path="data/dev_cube_wbc",
+        # path="data/dev_cube_wbc",
+        path="data/dev_cube_longhorizon_2cubes_waypoint",
         #path="data/dev_remote_wbc",
         #path="data/dev_pillow_base_arm",
         #path="data/dev_cube_base_arm",
@@ -564,15 +566,17 @@ def main():
         # use_triton=1
     )
     dataset = PointCloudDataset(cfg, use_euler=False, split="all")
-    d = dataset[0]
-    print("target_mode", d[-1].item())
-    user_clicked_labels = d[2] / d[2].sum()
-    indices = user_clicked_labels > 0
-    print("#positive:", user_clicked_labels[indices].size())
-    print("click labels:", user_clicked_labels[indices])
-    print("click labels max:", user_clicked_labels[indices].max())
-    #dataset.save_vis("vis_dev", render_gripper=False, fps=0, use_triton=True)
-    #dataset.save_vis("vis_dev", render_gripper=False, fps=1024, use_triton=True)
+    print("len dataset: ", len(dataset))
+    # d = dataset[0]
+    for d in dataset:
+        # print("target_mode", d[-1].item())
+        user_clicked_labels = d[2] / d[2].sum()
+        indices = user_clicked_labels > 0
+        print("#positive:", user_clicked_labels[indices].size())
+    # print("click labels:", user_clicked_labels[indices])
+    # print("click labels max:", user_clicked_labels[indices].max())
+    # dataset.save_vis("vis_dev", render_gripper=False, fps=0, use_triton=False)
+    # dataset.save_vis("vis_dev", render_gripper=False, fps=1024, use_triton=True)
 
 if __name__ == "__main__":
     main()

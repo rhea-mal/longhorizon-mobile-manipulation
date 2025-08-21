@@ -7,9 +7,9 @@ import spatialmath.base as smb
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 # filepath: /Users/rheamalhotra/Desktop/robotics/homer/envs/utils/camera_utils.py
-import sys
-sys.path.append('/Users/rheamalhotra/Desktop/robotics/homer/Inpaint-Anything')
-from remove_anything_gemini import inpaint
+# import sys
+# sys.path.append('/Users/rheamalhotra/Desktop/robotics/homer/Inpaint-Anything')
+# from remove_anything_gemini import inpaint
 
 def deproject_pixel_to_3d(obs, pixel, camera_name, env_cfg):
     """
@@ -148,9 +148,9 @@ def pcl_from_obs(obs, env_cfg, vis=False, cam_names=None):
 
     return merged_points, merged_colors
 
-input_img = "Inpaint-Anything/example/remove-anything/dog.jpg"
-object_name = "the bowl"
-inpaint(input_img, object_name)
+# input_img = "Inpaint-Anything/example/remove-anything/dog.jpg"
+# object_name = "the bowl"
+# inpaint(input_img, object_name)
 
 
 def pcl_from_obs_inpainted(obs, env_cfg, object_name, vis=False, cam_names=None):
@@ -160,8 +160,8 @@ def pcl_from_obs_inpainted(obs, env_cfg, object_name, vis=False, cam_names=None)
     cam_list = cam_names if cam_names is not None else env_cfg.pcl_cameras
 
     for view in cam_list:
-        input_img = obs['%s_image' % view]
-        rgb_image = inpaint(input_img, object_name, path=False)
+        rgb_image = obs['%s_image' % view]
+        # rgb_image = inpaint(rgb_image, object_name, path=False)
         depth_image = obs['%s_depth' % view]
 
         if env_cfg.is_sim:

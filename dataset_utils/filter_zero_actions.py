@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import glob
 import argparse
+from interactive_scripts.dataset_recorder import ActMode
 
 THRESH = 1e-3
 
@@ -21,7 +22,7 @@ def filter_dir(SRC_DIR):
         for step in demo:
             action = np.array(step["action"])
             # Remove if *any* element is smaller than threshold in absolute value
-            if np.any(np.abs(action) < THRESH):
+            if step["mode"] == ActMode.Interpolate and np.any(np.abs(action) < THRESH):
                 removed_count += 1
                 continue
             filtered_demo.append(step)
@@ -37,7 +38,7 @@ def filter_dir(SRC_DIR):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src_dir", type=str, default=".")
+    parser.add_argument("--src_dir", type=str, default="dev1_relabeled")
     args = parser.parse_args()
 
     filter_dir(args.src_dir)

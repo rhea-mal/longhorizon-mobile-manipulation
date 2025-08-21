@@ -1,5 +1,5 @@
 dataset:
-  path: data/dev_drawer_longhorizon_alldense/place_green
+  path: data/dev_drawer_longhorizon_alldense/place_green_filtered
   camera_views: base1_image+base2_image+wrist_image
   use_interpolate: 1
   wbc: 1

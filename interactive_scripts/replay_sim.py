@@ -5,7 +5,7 @@ from envs.common_mj_env import MujocoEnvConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default="dev1")
+    parser.add_argument("--data_dir", type=str, default="dev1_filtered")
     parser.add_argument("--mode", type=str, default="absolute")
     args = parser.parse_args()
     assert(args.mode in ["absolute", "delta"])

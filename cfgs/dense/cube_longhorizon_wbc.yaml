@@ -1,5 +1,5 @@
 dataset:
-  path: data/dev_drawer_longhorizon_1dense_filtered
+  path: data/dev_cube_longhorizon_1dense_filtered
   camera_views: base1_image+base2_image+wrist_image
   use_interpolate: 1
   wbc: 1
@@ -21,4 +21,4 @@ weight_decay: 1e-6
 cosine_schedule: 1
 lr_warm_up_steps: 500
 use_wb: 1
-save_dir: exps/dense/drawer_longhorizon_1dense
+save_dir: exps/dense/cube_longhorizon_1dense_filtered

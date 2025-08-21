@@ -101,10 +101,10 @@ def label_salient_points(episode_fn, env_cfg):
 
 if __name__ == "__main__":
     # Example usage
-    data_dir = 'dev1_relabeled'
+    data_dir = 'dev1_relabeled_filtered'
     try:
         from envs.common_mj_env import MujocoEnvConfig
-        env_cfg = pyrallis.load(MujocoEnvConfig, open(os.path.join(data_dir, "env_cfg.yaml"), "r"))
+        env_cfg = pyrallis.load(MujocoEnvConfig, open(os.path.join("dev1", "env_cfg.yaml"), "r"))
     except:
         from envs.common_real_env_cfg import RealEnvConfig, load_calibration_matrices
         env_cfg = pyrallis.load(RealEnvConfig, open(os.path.join(data_dir, "env_cfg.yaml"), "r"))
