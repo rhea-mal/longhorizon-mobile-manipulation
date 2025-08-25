@@ -208,7 +208,7 @@ if __name__ == "__main__":
     ## On a workstation with a display
     # python scripts/eval_waypoint.py --model exps/waypoint/cube_wbc/latest.pt --env_cfg envs/cfgs/cube_wbc.yaml 
 
-    # python scripts/eval_waypoint.py --model exps/waypoint/longhorizon/pick_green_cube/latest.pt --env_cfg envs/cfgs/cube_wbc_longhorizon.yaml 
+    # python scripts/eval_waypoint.py --model exps/waypoint/cube_longhorizon_2cubes_waypoint/latest.pt --env_cfg envs/cfgs/cube_wbc_longhorizon_2cubes.yaml
     
     ## Otherwise, for headless
     # xvfb-run -s "-screen 0 1920x1080x24" python scripts/eval_waypoint.py --model exps/waypoint/cube_wbc_triton/latest.pt --env_cfg envs/cfgs/cube_wbc.yaml --headless

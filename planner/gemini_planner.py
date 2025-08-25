@@ -1,4 +1,4 @@
-from vlm_utils import analyze_imageraw_with_gpt4v
+# from vlm_utils import analyze_imageraw_with_gpt4v
 import cv2
 from PIL import Image
 # pip install google-genai
@@ -38,7 +38,7 @@ def extract_action_plan_from_gemini_response(response):
 
 ### GEMINI
 def gemini_prompt(prompt, image_path=None, mode="basic"):
-    api_key="yourapikey"
+    api_key="AIzaSyAfs_FIMNuV4DWjUN47rc2IzZ7uQEvhqg0"
     client = genai.Client(api_key=api_key)
     # genai.configure(api_key=api_key)
 
@@ -65,18 +65,18 @@ def gemini_prompt(prompt, image_path=None, mode="basic"):
     return response
 
 ### CHAT GPT 40
-def chatgpt4o_prompt(prompt, image_path):
-    image_data = cv2.imread(jpg_path)
-    ## replace this with lab key when jeannette back
-    api_key = "yourapikey"
-    vlm_response = analyze_imageraw_with_gpt4v(
-                image_data,
-                prompt,
-                api_key=api_key,
-                model='gpt-4o-2024-08-06',
-                show_timing=True
-            ) 
-    return vlm_response
+# def chatgpt4o_prompt(prompt, image_path):
+#     image_data = cv2.imread(jpg_path)
+#     ## replace this with lab key when jeannette back
+#     api_key = "yourapikey"
+#     vlm_response = analyze_imageraw_with_gpt4v(
+#                 image_data,
+#                 prompt,
+#                 api_key=api_key,
+#                 model='gpt-4o-2024-08-06',
+#                 show_timing=True
+#             ) 
+#     return vlm_response
 
 def format_config(plan_array, library):
     config = []
@@ -89,9 +89,9 @@ def format_config(plan_array, library):
     print(f"✅ Config written to {config_path}")
 
 
-def list_of_policies():
+def list_of_policies(DIR):
     policies = {}  # dict of policy name → full path
-    for base_dir in ["exps/waypoint/longhorizon"]:
+    for base_dir in [DIR]:
         if not os.path.exists(base_dir):
             print(base_dir, " doesn't exist")
             continue  
@@ -102,12 +102,8 @@ def list_of_policies():
 
     return policies
 
-def main():
-    library = list_of_policies()
-    # library = {'pick_red_cube': 'exps/waypoint/cube_longhorizon_wbc', 'pick_green_cube': 'exps/waypoint/cube_base_arm', 'place_green_cube': 'exps/waypoint/cube_wbc', 'throw_purple_cube': 'exps/waypoint/cube_lh_pickonly_wbc', 'place_red_cube': 'exps/waypoint/cube_lh_placeonly_wbc', 'place_blue_cube': 'exps/waypoint/cube_longhorizon_wbc_bad', 'pick_blue_cube': 'exps/dense/cube_base_arm_delta_allcams', 'cube_wbc_delta_allcams': 'exps/dense/cube_wbc_delta_allcams'}
-    task = "Move the green cube to the target"
-
-
+def make_plan(policy_library_dir, task):
+    library = list_of_policies(policy_library_dir)
     prompt = (
         "You are a helpful robot planner. Only return a JSON array of actions. "
         "Do not include any explanation, markdown, or formatting.\n"
@@ -123,6 +119,11 @@ def main():
     print(raw_output)
     plan_array = extract_action_plan_from_gemini_response(raw_output)
     format_config(plan_array, library)
+
+def main():
+    policy_library_dir = "exps/waypoint/longhorizon"
+    task = "pick and place the cube twice"
+    make_plan(policy_library_dir, task)
 
 if __name__ == '__main__':
     main()

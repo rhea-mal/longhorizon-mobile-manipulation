@@ -496,11 +496,9 @@ class CommonMujocoSim:
                         np.random.uniform(*y_range),
                         0
                     ])
-                cube1 = np.array([1.0,  0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
-                cube2 = np.array([1.0,  -0.4, 0.0]) + noise((-0.05, 0.05), (-0.2, 0.2))
-                goal1 = np.array([1.0,  0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
-                goal2 = np.array([1.0,  -0.08, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
-
+                cube1 = np.array([1.0,  0.35, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
+                cube2 = np.array([1.0,  -0.35, 0.0]) + noise((-0.05, 0.05), (-0.05, 0.05))
+                
             # Set positions in qpos
             joint_id1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "interactive_obj_freejoint")
             qpos_adr1 = self.model.jnt_qposadr[joint_id1]
@@ -674,13 +672,18 @@ class CommonMujocoSim:
         return reward
 
     def is_local_success(self):
-        if self.current_task in ["cube", "pick_green_cube"]:
+        if self.current_task in ["cube", "pick_green_cube", "pick_green"]:
             cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
             return cube_pos[2] > 0.10
+        elif self.current_task in ["pick_blue"]:
+            cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj2")]
+            return cube_pos[2] > 0.10
 
-        elif self.current_task == "place_green_cube":
-            cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
-                
+        elif self.current_task in ["place_green_cube", "place_green", "place_blue"]:
+            if self.current_task == "place_blue":
+                cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj2")]
+            else:
+                cube_pos = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "interactive_obj")]
             goal_center = np.array([1.0, 0.0])              # from <geom pos="1 0 0.02">
             goal_half_extent = np.array([0.15, 0.15])       # from <size="0.15 0.15 0.02">
             goal_top_z = 0.06                               # center z=0.02 + half-height z=0.02
@@ -762,11 +765,11 @@ class CommonMujocoEnv:
         assert self.task in ["cube", "cube_size", "cube_distractor", "cube_longhorizon_2cubes", "cube_longhorizon", "cube_specified", "open", "dishwasher", "drawer"]
         if self.task in ["cube", "cube_size", "cube_distractor", "cube_specified"]:
             self.max_num_step = 325
-        elif self.task in ["cube_longhorizon", "cube_longhorizon_2cubes", "drawer"] :
+        elif self.task in ["cube_longhorizon", "drawer"] :
             self.max_num_step = 600
         elif self.task == "open":
             self.max_num_step = 800
-        elif self.task == "dishwasher":
+        elif self.task in ["dishwasher", 'cube_longhorizon_2cubes']:
             self.max_num_step = 1000
 
         TASK_TO_MJCF_PATH = {

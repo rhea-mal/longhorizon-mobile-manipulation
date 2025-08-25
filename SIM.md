@@ -153,49 +153,17 @@ Make sure that `homer/exps` now contains subfolders `waypoint` and `dense` with 
 ### 2. Run evaluation
 
 #### Sim Tasks
-
-
-Drawer
+2Cube Longhorizon
+- 1 Waypoint Policy: 
 ```bash
-python scripts/eval_dense.py -d exps/dense/drawer_longhorizon_dense/latest.pt --num_episode 20 -e envs/cfgs/drawer.yaml
+python scripts/eval_waypoint.py --model exps/waypoint/cube_longhorizon_2cubes_waypoint/latest.pt --num_episode 20 --env_cfg envs/cfgs/cube_wbc_longhorizon_2cubes.yaml
 ```
 
-
-Open Cabinet
-- HoMeR: 
+Modular + Gemini Planner
 ```bash
-python scripts/eval_hybrid.py -w exps/waypoint/cabinet_wbc/latest.pt -d exps/dense/cabinet_wbc_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/open_wbc.yaml
+python scripts/eval_hybrid_longhorizon.py -task "pick up the green cube" -policy_library exps/waypoint/cube_longhorizon_2cubes_allwaypoint --env_cfg envs/cfgs/cube_wbc_longhorizon_2cubes.yaml
 ```
-- HoMeR-B+A:
-```bash
-python scripts/eval_hybrid.py -w exps/waypoint/cabinet_base_arm/latest.pt -d exps/dense/cabinet_base_arm_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/open_base_arm.yaml
-```
-- DP-B+A:
-```bash
-python scripts/eval_dense.py -d exps/dense/cabinet_base_arm_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/open_base_arm.yaml
-```
-- DP-WBC:
-```bash
-python scripts/eval_dense.py -d exps/dense/cabinet_wbc_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/open_wbc.yaml
-```
-
-Open Dishwasher
-- HoMeR: 
-```bash
-python scripts/eval_hybrid.py -w exps/waypoint/dishwasher_wbc/latest.pt -d exps/dense/dishwasher_wbc_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/dishwasher_wbc.yaml
-```
-- HoMeR-B+A:
-```bash
-python scripts/eval_hybrid.py -w exps/waypoint/dishwasher_base_arm/latest.pt -d exps/dense/dishwasher_base_arm_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/dishwasher_base_arm.yaml
-```
-- DP-B+A:
-```bash
-python scripts/eval_dense.py -d exps/dense/dishwasher_base_arm_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/dishwasher_base_arm.yaml
-```
-- DP-WBC:
-```bash
-python scripts/eval_dense.py -d exps/dense/dishwasher_wbc_delta_allcams/latest.pt --num_episode 20 -e envs/cfgs/dishwasher_wbc.yaml
-```
+where in this case, the policy_library directory contains individual checkpoints under: pick_blue  pick_green  place_blue  place_green
 
 Cube
 - HoMeR: 

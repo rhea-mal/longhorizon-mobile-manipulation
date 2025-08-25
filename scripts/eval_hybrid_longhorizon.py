@@ -21,6 +21,7 @@ import yaml
 from scripts.train_waypoint import load_waypoint
 from scripts.train_dense import load_model
 import pdb
+from planner.gemini_planner import make_plan
 
 def run_dense_mode(env, dense_policy, dense_dataset, recorder, prev_obs):
     cached_actions = []
@@ -181,6 +182,7 @@ def eval_hybrid(
         policy_entry = policies[i]
         current_task = policy_entry["name"]
         env.set_current_task(current_task)
+        print(f"[INFO] Executing task {i}: {current_task} with mode {mode}")    
         if policy_entry["type"] == "waypoint" and mode in [ActMode.ArmWaypoint.value, ActMode.BaseWaypoint.value]:
             mode, obs = run_waypoint_mode(env, policy_entry["policy"], num_pass, recorder, mode)
 
@@ -213,6 +215,10 @@ def main():
     parser.add_argument("--record", type=int, default=1)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("-e", "--env_cfg", type=str, required=True)
+    # for gemini planner
+    parser.add_argument("-task", type=str, default="pick up the green cube")
+    parser.add_argument("-policy_library", type=str, default="exps/waypoint/cube_longhorizon_2cubes_allwaypoint")
+
     args = parser.parse_args()
 
     env_cfg = pyrallis.load(MujocoEnvConfig, open(args.env_cfg, "r"))
@@ -221,11 +227,15 @@ def main():
     else:
         from envs.mj_env_base_arm import MujocoEnv
 
+    # gemini planner
+    make_plan(args.policy_library, args.task)
     with open(args.longhorizon_cfg, 'r') as f:
         config = yaml.safe_load(f)
+        print(config)
 
     policies = []
     for policy_path in config:
+        print(f"Loading policy from {policy_path}")
         if "waypoint" in policy_path:
             execute_path = os.path.join(policy_path, "latest.pt")
             name = policy_path.split('/')[-1]
